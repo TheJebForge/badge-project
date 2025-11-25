@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="CMakePythonSetting">
+    <option name="pythonIntegrationState" value="YES" />
+  </component>
+  <component name="CMakeWorkspace" PROJECT_DIR="$PROJECT_DIR$" />
+  <component name="CidrRootsConfiguration">
+    <sourceRoots>
+      <file path="$PROJECT_DIR$/main" />
+    </sourceRoots>
+    <libraryRoots>
+      <file path="$USER_HOME$/Clones/esp-idf" />
+      <file path="$PROJECT_DIR$/managed_components" />
+      <file path="$PROJECT_DIR$/managed_components/lvgl__lvgl" />
+    </libraryRoots>
+  </component>
+</project>

@@ -1,0 +1,4 @@
+[submodule "badge-project-cpp/components/esp-nimble-cpp"]
+	path = badge-project-cpp/components/esp-nimble-cpp
+	url = git@github.com:h2zero/esp-nimble-cpp.git
+	branch = release/2.3

@@ -1,0 +1,22 @@
+## Expected folder structure for firmware
+- sdcard/
+  - characters/
+    - \<character_name\>/
+      - character.bin
+      - states/ (optional)
+        - \<state_name\>/
+          - state.bin
+          - transitions/ (optional)
+            - \<next_state_name\>/
+              - transition.bin
+      - images/ (optional)
+        - \<image_name\>.bin
+      - animations/ (optional)
+        - \<animation_name\>/
+          - animation.bin
+          - frames/
+            - #index#.bin
+      - actions/ (optional)
+        - <action_name>/
+          - action.bin
+      - selected.lock (optional) - created automatically, exists only if it's the current character  

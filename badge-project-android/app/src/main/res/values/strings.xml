@@ -1,0 +1,21 @@
+<resources>
+    <string name="app_name">BP Control</string>
+    <string name="notification_channel">Board Connection</string>
+    <string name="waiting_for_permissions">Waiting for permissions...</string>
+    <string name="no_permissions_title">Here\'s the thing...</string>
+    <string name="no_permissions_text">"This application is about controlling a badge board.\n\nNearby devices permission is required to access Bluetooth Low Energy and the app cannot work without creating a foreground service. \nTo run a foreground service it's required to create a notification, hence the notifications permission.\n\nTo continue please authorize the app to use the permissions.</string>
+    <string name="authorize">Grant permissions</string>
+    <string name="device_list_title">Device List</string>
+    <string name="no_devices_found">No devices found</string>
+    <string name="already_scanning">Already scanning!</string>
+    <string name="previously_connected">Previously Connected</string>
+    <string name="currently_connected">Currently Connected</string>
+    <string name="notification_desc">Currently servicing %1$s (%2$s)</string>
+    <string name="device_control">Device Control</string>
+    <string name="character_mode">Character</string>
+    <string name="current_mode">Current Mode</string>
+    <string name="device_disconnected">Device Disconnected</string>
+    <string name="character_name">Character Name</string>
+    <string name="character_species">Character Species</string>
+    <string name="run_action">Run Action</string>
+</resources>
