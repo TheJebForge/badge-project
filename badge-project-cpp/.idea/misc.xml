@@ -13,5 +13,8 @@
       <file path="$PROJECT_DIR$/managed_components" />
       <file path="$PROJECT_DIR$/managed_components/lvgl__lvgl" />
     </libraryRoots>
+    <excludeRoots>
+      <file path="$PROJECT_DIR$/components/esp-nimble-cpp" />
+    </excludeRoots>
   </component>
 </project>
