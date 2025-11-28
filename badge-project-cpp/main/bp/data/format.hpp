@@ -87,11 +87,32 @@ struct bp_character_state_animation_descriptor_s {
     bool preload;
 };
 
+/// (frames/<index>.bin) File representing a frame in a sequence of images
+struct bp_sequence_frame_file_s {
+    char image[bp::data::IMAGE_NAME_MAX_LEN];
+    int64_t duration_us;
+};
+
+/// Loading mode for sequences, either load all frames at once when state switches,
+/// load new frame each time, or preload all frames
+enum bp_character_sequence_mode_e {
+    BP_CHARACTER_SEQUENCE_MODE_LOAD_ALL,
+    BP_CHARACTER_SEQUENCE_MODE_LOAD_EACH,
+    BP_CHARACTER_SEQUENCE_MODE_PRELOAD
+};
+
+/// Describes data when state is a sequence
+struct bp_character_state_sequence_descriptor_s {
+    uint16_t frame_count;
+    bp_character_sequence_mode_e mode;
+};
+
 /// Enum for deciding what the state should currently show
 enum bp_character_state_image_e {
     BP_CHARACTER_STATE_NO_IMAGE,
     BP_CHARACTER_STATE_SINGLE_IMAGE,
-    BP_CHARACTER_STATE_ANIMATION
+    BP_CHARACTER_STATE_ANIMATION,
+    BP_CHARACTER_STATE_SEQUENCE
 };
 
 /// Union of possible data options for the state's image
@@ -99,6 +120,7 @@ union bp_character_state_image_u {
     char no_data;
     bp_character_image_descriptor_s image;
     bp_character_state_animation_descriptor_s animation;
+    bp_character_state_sequence_descriptor_s sequence;
 };
 
 /// (state.bin) Definition of character's state

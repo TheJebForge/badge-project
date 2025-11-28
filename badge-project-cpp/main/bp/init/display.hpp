@@ -18,6 +18,9 @@ namespace bp {
     constexpr gpio_num_t DISPLAY_GPIO_BACKLIGHT = GPIO_NUM_13;
     constexpr bool DISPLAY_DEFAULT_BACKLIGHT = true;
 
+    bool get_backlight_state();
+    void set_backlight_state(bool);
+
     esp_err_t init_display();
 
     esp_err_t init_touchscreen();

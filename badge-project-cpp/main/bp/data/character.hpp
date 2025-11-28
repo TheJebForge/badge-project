@@ -39,7 +39,23 @@ namespace bp::data {
         bool preload;
     };
 
-    using StateImageVariant = std::variant<std::monostate, StateImage, StateAnimation>;
+    struct SequenceFrame {
+        std::string image;
+        int64_t duration_us;
+    };
+
+    enum class SequenceLoadMode {
+        LoadAll,
+        LoadEach,
+        Preload
+    };
+
+    struct StateSequence {
+        std::vector<SequenceFrame> frames;
+        SequenceLoadMode mode;
+    };
+
+    using StateImageVariant = std::variant<std::monostate, StateImage, StateAnimation, StateSequence>;
 
     struct State {
         StateImageVariant image;

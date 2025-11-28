@@ -150,6 +150,56 @@ namespace bp::data {
                         };
                         break;
                     }
+                    case BP_CHARACTER_STATE_SEQUENCE: {
+                        auto& [frame_count, mode] = state_struct.image.sequence;
+
+                        state = {
+                            .image = StateSequence {
+                                .frames{},
+                            }
+                        };
+
+                        // ReSharper disable once CppUseStructuredBinding
+                        auto& sequence = std::get<StateSequence>(state.image);
+
+                        switch (mode) {
+                            case BP_CHARACTER_SEQUENCE_MODE_LOAD_ALL:
+                                sequence.mode = SequenceLoadMode::LoadAll;
+                                break;
+                            case BP_CHARACTER_SEQUENCE_MODE_LOAD_EACH:
+                                sequence.mode = SequenceLoadMode::LoadEach;
+                                break;
+                            case BP_CHARACTER_SEQUENCE_MODE_PRELOAD:
+                                sequence.mode = SequenceLoadMode::Preload;
+                                break;
+                        }
+
+                        const fs::path frames_folder = state_entry.path() / "frames";
+
+                        for (int frame_index = 0; frame_index < frame_count; frame_index++) {
+                            const auto frame_path = frames_folder / std::format("{}.bin", frame_index);
+
+                            if (!fs::exists(frame_path)) continue;
+
+                            bp_sequence_frame_file_s frame_struct{};
+
+                            {
+                                std::ifstream frame_file(frame_path);
+                                frame_file.read(
+                                    reinterpret_cast<std::istream::char_type*>(&frame_struct),
+                                    sizeof(bp_sequence_frame_file_s)
+                                );
+                                frame_file.close();
+                            }
+
+                            sequence.frames.emplace_back(
+                                frame_struct.image,
+                                frame_struct.duration_us
+                            );
+                        }
+
+                        break;
+                    }
                 }
 
                 {

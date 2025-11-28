@@ -35,6 +35,10 @@ namespace bp {
     constexpr auto COMMAND_CHR_UUID = "00000010-467e-413f-9559-419eb1a367a7";
     constexpr auto RESPONSE_CHR_UUID = "00000011-467e-413f-9559-419eb1a367a7";
 
+    constexpr auto SCREEN_SVC_UUID = "230521b4-d8c4-4e35-9b91-6327de387d77";
+
+    constexpr auto BACKLIGHT_CHR_UUID = "00000001-d8c4-4e35-9b91-6327de387d77";
+
     void init_bluetooth(BluetoothPairRequestCallback);
     void respond_pair(const NimBLEConnInfo&, bool);
 
@@ -55,6 +59,8 @@ namespace bp {
         NimBLECharacteristic* command_chr;
         NimBLECharacteristic* response_chr;
 
+        NimBLECharacteristic* backlight_chr;
+
         class BLECommandHandler final : public NimBLECharacteristicCallbacks {
             BPCharacteristics* parent;
 
@@ -66,7 +72,7 @@ namespace bp {
 
         BLECommandHandler command_handler;
 
-        explicit BPCharacteristics(NimBLEService* service);
+        explicit BPCharacteristics(NimBLEService* char_svc, NimBLEService* scr_svc);
 
     public:
         void set_character_info(const std::string& name, const std::string& species, std::size_t action_count) const;

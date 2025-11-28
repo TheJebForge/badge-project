@@ -78,6 +78,17 @@ static const st7796_lcd_init_cmd_t lcd_init_cmds[] = {
     {0x2C, (uint8_t []){0x00}, 0, 0},
 };
 
+static bool screen_backlight = bp::DISPLAY_DEFAULT_BACKLIGHT;
+
+bool bp::get_backlight_state() {
+    return screen_backlight;
+}
+
+void bp::set_backlight_state(const bool new_state) {
+    gpio_set_level(DISPLAY_GPIO_BACKLIGHT, new_state);
+    screen_backlight = new_state;
+}
+
 esp_err_t bp::init_display() {
     esp_err_t ret = ESP_OK;
 
@@ -95,7 +106,7 @@ esp_err_t bp::init_display() {
         ESP_ERROR_CHECK(gpio_set_level(DISPLAY_GPIO_IM1, true));
 
         // Set backlight to default state
-        ESP_ERROR_CHECK(gpio_set_level(DISPLAY_GPIO_BACKLIGHT, DISPLAY_DEFAULT_BACKLIGHT));
+        ESP_ERROR_CHECK(gpio_set_level(DISPLAY_GPIO_BACKLIGHT, screen_backlight));
 
         ESP_LOGD(TAG, "Initializing SPI bus");
 

@@ -6,6 +6,8 @@
       - states/ (optional)
         - \<state_name\>/
           - state.bin
+          - frames/ (optional)
+            - \<index\>.bin
           - transitions/ (optional)
             - \<next_state_name\>/
               - transition.bin
