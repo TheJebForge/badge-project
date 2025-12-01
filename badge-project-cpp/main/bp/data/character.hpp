@@ -40,7 +40,11 @@ namespace bp::data {
     };
 
     struct SequenceFrame {
-        std::string image;
+        std::string image_name;
+        uint32_t width;
+        uint32_t height;
+        bool has_alpha;
+        bool upscale;
         int64_t duration_us;
     };
 
@@ -87,13 +91,9 @@ namespace bp::data {
         std::string state_name;
     };
 
-    struct ActionStartAnimation {
-        std::string animation_name;
-    };
-
     struct Action {
         std::string display;
-        std::variant<ActionSwitchState, ActionStartAnimation> type;
+        std::variant<ActionSwitchState> type;
     };
 
     struct Character {

@@ -89,7 +89,11 @@ struct bp_character_state_animation_descriptor_s {
 
 /// (frames/<index>.bin) File representing a frame in a sequence of images
 struct bp_sequence_frame_file_s {
-    char image[bp::data::IMAGE_NAME_MAX_LEN];
+    char image_name[bp::data::IMAGE_NAME_MAX_LEN];
+    uint32_t width;
+    uint32_t height;
+    bool has_alpha;
+    bool upscale;
     int64_t duration_us;
 };
 
@@ -131,15 +135,13 @@ struct bp_character_state_file_s {
 
 /// Enum for whatever action user might want to invoke in the state machine
 enum bp_character_action_e {
-    BP_CHARACTER_ACTION_SWITCH_STATE,
-    BP_CHARACTER_ACTION_START_ANIMATION
+    BP_CHARACTER_ACTION_SWITCH_STATE
 };
 
 /// Union of possible action data
 union bp_character_action_u {
     char no_data;
     char state_name[bp::data::STATE_NAME_MAX_LEN];
-    char animation[bp::data::ANIMATION_NAME_MAX_LEN];
 };
 
 /// (action.bin) Definition of character action that can be performed from bluetooth

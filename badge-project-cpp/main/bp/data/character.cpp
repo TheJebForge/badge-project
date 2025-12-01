@@ -6,6 +6,7 @@
 #include "format.hpp"
 
 #include "esp_log.h"
+#include "freertos/FreeRTOS.h"
 
 namespace fs = std::filesystem;
 
@@ -84,10 +85,12 @@ namespace bp::data {
 
             {
                 const fs::path char_filename = char_folder / "character.bin";
-                std::ifstream character_file(char_filename);
-                character_file.read(reinterpret_cast<std::istream::char_type*>(&character_struct),
-                                    sizeof(bp_character_file_s));
-                character_file.close();
+                auto character_file = std::make_unique<std::ifstream>(char_filename);
+                character_file->read(
+                    reinterpret_cast<std::istream::char_type*>(&character_struct),
+                    sizeof(bp_character_file_s)
+                );
+                character_file->close();
             }
 
             if (character_struct.format_version != FORMAT_VERSION) {
@@ -111,56 +114,52 @@ namespace bp::data {
 
                 {
                     const fs::path state_filename = state_entry.path() / "state.bin";
-                    std::ifstream state_file(state_filename);
-                    state_file.read(reinterpret_cast<std::istream::char_type*>(&state_struct),
-                                    sizeof(bp_character_state_file_s));
-                    state_file.close();
+                    auto state_file = std::make_unique<std::ifstream>(state_filename);
+                    state_file->read(
+                        reinterpret_cast<std::istream::char_type*>(&state_struct),
+                        sizeof(bp_character_state_file_s)
+                    );
+                    state_file->close();
                 }
 
-                State state;
+                auto state_pair = states.emplace(state_entry.path().filename(), State{}).first;
+                auto& [image, transitions] = state_pair->second;
+
                 switch (state_struct.image_type) {
                     case BP_CHARACTER_STATE_NO_IMAGE:
-                        state = {
-                            .image = std::monostate{}
-                        };
+                        image = std::monostate{};
                         break;
                     case BP_CHARACTER_STATE_SINGLE_IMAGE: {
                         auto& [image_name, width, height, has_alpha, upscale, preload] = state_struct.image.image;
-                        state = {
-                            .image = StateImage{
-                                .image_name = image_name,
-                                .width = width,
-                                .height = height,
-                                .has_alpha = has_alpha,
-                                .upscale = upscale,
-                                .preload = preload
-                            }
+                        image = StateImage{
+                            .image_name = image_name,
+                            .width = width,
+                            .height = height,
+                            .has_alpha = has_alpha,
+                            .upscale = upscale,
+                            .preload = preload
                         };
                         break;
                     }
                     case BP_CHARACTER_STATE_ANIMATION: {
                         auto& [name, next_state, loop_count, preload] = state_struct.image.animation;
-                        state = {
-                            .image = StateAnimation{
-                                .name = name,
-                                .next_state = next_state,
-                                .loop_count = loop_count,
-                                .preload = preload
-                            }
+                        image = StateAnimation{
+                            .name = name,
+                            .next_state = next_state,
+                            .loop_count = loop_count,
+                            .preload = preload
                         };
                         break;
                     }
                     case BP_CHARACTER_STATE_SEQUENCE: {
                         auto& [frame_count, mode] = state_struct.image.sequence;
 
-                        state = {
-                            .image = StateSequence {
-                                .frames{},
-                            }
+                        image = StateSequence{
+                            .frames{},
                         };
 
                         // ReSharper disable once CppUseStructuredBinding
-                        auto& sequence = std::get<StateSequence>(state.image);
+                        auto& sequence = std::get<StateSequence>(image);
 
                         switch (mode) {
                             case BP_CHARACTER_SEQUENCE_MODE_LOAD_ALL:
@@ -174,39 +173,40 @@ namespace bp::data {
                                 break;
                         }
 
-                        const fs::path frames_folder = state_entry.path() / "frames";
-
                         for (int frame_index = 0; frame_index < frame_count; frame_index++) {
-                            const auto frame_path = frames_folder / std::format("{}.bin", frame_index);
+                            const auto frame_path = state_entry.path() / "frames" / std::format("{}.bin", frame_index);
 
                             if (!fs::exists(frame_path)) continue;
 
                             bp_sequence_frame_file_s frame_struct{};
 
                             {
-                                std::ifstream frame_file(frame_path);
-                                frame_file.read(
+                                auto frame_file = std::make_unique<std::ifstream>(frame_path);
+                                frame_file->read(
                                     reinterpret_cast<std::istream::char_type*>(&frame_struct),
                                     sizeof(bp_sequence_frame_file_s)
                                 );
-                                frame_file.close();
+                                frame_file->close();
                             }
 
                             sequence.frames.emplace_back(
-                                frame_struct.image,
+                                frame_struct.image_name,
+                                frame_struct.width,
+                                frame_struct.height,
+                                frame_struct.has_alpha,
+                                frame_struct.upscale,
                                 frame_struct.duration_us
                             );
                         }
-
                         break;
                     }
+                    default:
+                        break;
                 }
 
                 {
                     if (const fs::path transition_folder = state_entry.path() / "transitions";
                         fs::exists(transition_folder)) {
-                        std::vector<StateTransition> transitions{};
-
                         for (const auto& transition_entry: fs::directory_iterator(transition_folder)) {
                             if (!transition_entry.is_directory()) continue;
 
@@ -214,12 +214,12 @@ namespace bp::data {
 
                             {
                                 const fs::path transition_filename = transition_entry.path() / "transition.bin";
-                                std::ifstream transition_file(transition_filename);
-                                transition_file.read(
+                                auto transition_file = std::make_unique<std::ifstream>(transition_filename);
+                                transition_file->read(
                                     reinterpret_cast<std::istream::char_type*>(&transition_struct),
                                     sizeof(bp_state_transition_file_s)
                                 );
-                                transition_file.close();
+                                transition_file->close();
                             }
 
                             StateTransition transition{
@@ -239,12 +239,8 @@ namespace bp::data {
 
                             transitions.emplace_back(std::move(transition));
                         }
-
-                        state.transitions = std::move(transitions);
                     }
                 }
-
-                states.emplace(state_entry.path().filename(), std::move(state));
             }
         }
 
@@ -260,10 +256,12 @@ namespace bp::data {
 
                 {
                     const fs::path animation_filename = animation_entry.path() / "animation.bin";
-                    std::ifstream animation_file(animation_filename);
-                    animation_file.read(reinterpret_cast<std::istream::char_type*>(&animation_struct),
-                                        sizeof(bp_character_animation_file_s));
-                    animation_file.close();
+                    auto animation_file = std::make_unique<std::ifstream>(animation_filename);
+                    animation_file->read(
+                        reinterpret_cast<std::istream::char_type*>(&animation_struct),
+                        sizeof(bp_character_animation_file_s)
+                    );
+                    animation_file->close();
                 }
 
                 auto& [
@@ -316,10 +314,12 @@ namespace bp::data {
 
                 {
                     const fs::path action_filename = action_entry.path() / "action.bin";
-                    std::ifstream action_file(action_filename);
-                    action_file.read(reinterpret_cast<std::istream::char_type*>(&action_struct),
-                                     sizeof(bp_character_action_file_s));
-                    action_file.close();
+                    auto action_file = std::make_unique<std::ifstream>(action_filename);
+                    action_file->read(
+                        reinterpret_cast<std::istream::char_type*>(&action_struct),
+                        sizeof(bp_character_action_file_s)
+                    );
+                    action_file->close();
                 }
 
                 Action action{
@@ -330,11 +330,6 @@ namespace bp::data {
                     case BP_CHARACTER_ACTION_SWITCH_STATE:
                         action.type = ActionSwitchState{
                             .state_name = action_struct.data.state_name
-                        };
-                        break;
-                    case BP_CHARACTER_ACTION_START_ANIMATION:
-                        action.type = ActionStartAnimation{
-                            .animation_name = action_struct.data.animation
                         };
                         break;
                 }
@@ -350,48 +345,75 @@ namespace bp::data {
         return preloaded_data;
     }
 
+    lv_image_dsc_t make_image_dsc(
+        const bool has_alpha, const uint32_t width, const uint32_t height,
+        const ImageDataVec& image_data
+    ) {
+        return {
+            .header{
+                .magic = LV_IMAGE_HEADER_MAGIC,
+                .cf = static_cast<uint32_t>(has_alpha ? LV_COLOR_FORMAT_RGB565A8 : LV_COLOR_FORMAT_RGB565),
+                .w = width,
+                .h = height
+            },
+            .data_size = static_cast<uint32_t>(image_data.size()),
+            .data = image_data.data()
+        };
+    }
+
+    void preload_image(
+        PreloadedData& preloaded_data, const std::string& image_name, const fs::path& images_folder,
+        const bool has_alpha, const uint32_t width, const uint32_t height
+    ) {
+        ImageDataVec image_data{};
+
+        {
+            uintmax_t file_size = 0;
+            const fs::path image_filename = images_folder / std::format("{}.bin", image_name);
+
+            file_size = fs::file_size(image_filename);
+
+            if (heap_caps_get_largest_free_block(MALLOC_CAP_SPIRAM) < file_size) {
+                throw data_exception{Error::OutOfRAM};
+            }
+
+            image_data.resize(file_size);
+
+            const auto image_file = std::make_unique<std::ifstream>(image_filename);
+            image_file->read(
+                reinterpret_cast<std::istream::char_type*>(image_data.data()),
+                static_cast<std::streamsize>(file_size)
+            );
+            image_file->close();
+        }
+
+        preloaded_data.image_data.emplace(
+            image_name,
+            std::make_tuple(make_image_dsc(has_alpha, width, height, image_data), std::move(image_data))
+        );
+    }
+
     void preload_data(PreloadedData& preloaded_data, const Character& character) {
         const fs::path char_folder{std::format("{}/{}", CHARACTERS_PATH, character.id)};
 
         for (const fs::path images_folder = char_folder / "images";
              const auto& [_, state]: character.states) {
-            if (!std::holds_alternative<StateImage>(state.image)) continue;
+            if (const auto* image = std::get_if<StateImage>(&state.image)) {
+                if (!image->preload) continue;
+                preload_image(
+                    preloaded_data, image->image_name, images_folder,
+                    image->has_alpha, image->width, image->height
+                );
+            } else if (const auto* sequence = std::get_if<StateSequence>(&state.image)) {
+                if (sequence->mode != SequenceLoadMode::Preload) continue;
 
-            const auto& image = std::get<StateImage>(state.image);
-            if (!image.preload) continue;
-
-            ImageDataVec image_data{};
-            uintmax_t file_size = 0;
-
-            {
-                const fs::path image_filename = images_folder / std::format("{}.bin", image.image_name);
-
-                file_size = fs::file_size(image_filename);
-
-                if (heap_caps_get_largest_free_block(MALLOC_CAP_SPIRAM) < file_size) {
-                    throw data_exception{Error::OutOfRAM};
+                for (const auto& frame : sequence->frames) {
+                    preload_image(
+                        preloaded_data, frame.image_name, images_folder,
+                        frame.has_alpha, frame.width, frame.height
+                    );
                 }
-
-                image_data.resize(file_size);
-
-                std::ifstream image_file{image_filename};
-                image_file.read(reinterpret_cast<std::istream::char_type*>(image_data.data()),
-                                static_cast<std::streamsize>(file_size));
-                image_file.close();
             }
-
-            lv_image_dsc_t image_dsc{
-                .header{
-                    .magic = LV_IMAGE_HEADER_MAGIC,
-                    .cf = static_cast<uint32_t>(image.has_alpha ? LV_COLOR_FORMAT_RGB565A8 : LV_COLOR_FORMAT_RGB565),
-                    .w = image.width,
-                    .h = image.height
-                },
-                .data_size = static_cast<uint32_t>(file_size),
-                .data = image_data.data()
-            };
-
-            preloaded_data.image_data.emplace(image.image_name, std::make_tuple(image_dsc, std::move(image_data)));
         }
 
         for (const fs::path animations_folder = char_folder / "animations";
@@ -418,10 +440,12 @@ namespace bp::data {
 
                 {
                     const fs::path image_filename = frames_folder / std::format("{}.bin", frame_index);
-                    std::ifstream image_file{image_filename};
-                    image_file.read(reinterpret_cast<std::istream::char_type*>(frame.data()),
-                                    static_cast<std::streamsize>(data_size));
-                    image_file.close();
+                    auto image_file = std::make_unique<std::ifstream>(image_filename);
+                    image_file->read(
+                        reinterpret_cast<std::istream::char_type*>(frame.data()),
+                        static_cast<std::streamsize>(data_size)
+                    );
+                    image_file->close();
                 }
 
                 frames.emplace_back(std::move(frame));

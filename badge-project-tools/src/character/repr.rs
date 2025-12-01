@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use crate::character::util::{any_as_u8_vec, string_to_char_array};
-use crate::{bp_character_action_e, bp_character_action_e_BP_CHARACTER_ACTION_START_ANIMATION, bp_character_action_e_BP_CHARACTER_ACTION_SWITCH_STATE, bp_character_action_file_s, bp_character_action_u, bp_character_animation_file_s, bp_character_animation_mode_e_BP_CHARACTER_ANIMATION_MODE_FROM_RAM, bp_character_animation_mode_e_BP_CHARACTER_ANIMATION_MODE_FROM_SDCARD, bp_character_file_s, bp_character_image_descriptor_s, bp_character_state_animation_descriptor_s, bp_character_state_file_s, bp_character_state_image_e_BP_CHARACTER_STATE_ANIMATION, bp_character_state_image_e_BP_CHARACTER_STATE_NO_IMAGE, bp_character_state_image_e_BP_CHARACTER_STATE_SINGLE_IMAGE, bp_character_state_image_u, bp_data_FORMAT_VERSION, bp_state_transition_file_s, bp_state_trigger_e_BP_STATE_TRIGGER_CLICKED, bp_state_trigger_e_BP_STATE_TRIGGER_ELAPSED_TIME, bp_state_trigger_s, bp_state_trigger_u};
+use crate::{bp_character_action_e_BP_CHARACTER_ACTION_SWITCH_STATE, bp_character_action_file_s, bp_character_action_u, bp_character_animation_file_s, bp_character_animation_mode_e_BP_CHARACTER_ANIMATION_MODE_FROM_RAM, bp_character_animation_mode_e_BP_CHARACTER_ANIMATION_MODE_FROM_SDCARD, bp_character_file_s, bp_character_image_descriptor_s, bp_character_sequence_mode_e_BP_CHARACTER_SEQUENCE_MODE_LOAD_ALL, bp_character_sequence_mode_e_BP_CHARACTER_SEQUENCE_MODE_LOAD_EACH, bp_character_sequence_mode_e_BP_CHARACTER_SEQUENCE_MODE_PRELOAD, bp_character_state_animation_descriptor_s, bp_character_state_file_s, bp_character_state_image_e_BP_CHARACTER_STATE_ANIMATION, bp_character_state_image_e_BP_CHARACTER_STATE_NO_IMAGE, bp_character_state_image_e_BP_CHARACTER_STATE_SEQUENCE, bp_character_state_image_e_BP_CHARACTER_STATE_SINGLE_IMAGE, bp_character_state_image_u, bp_character_state_sequence_descriptor_s, bp_data_FORMAT_VERSION, bp_sequence_frame_file_s, bp_state_transition_file_s, bp_state_trigger_e_BP_STATE_TRIGGER_CLICKED, bp_state_trigger_e_BP_STATE_TRIGGER_ELAPSED_TIME, bp_state_trigger_s, bp_state_trigger_u};
 use serde::Deserialize;
 use std::ffi::NulError;
 use std::path::PathBuf;
@@ -39,15 +39,23 @@ pub enum StateImage {
         path: PathBuf,
         width: u32,
         height: u32,
+        #[serde(default)]
         alpha: bool,
+        #[serde(default)]
         upscale: bool,
+        #[serde(default)]
         preload: bool
     },
     Animation {
         name: String,
         next_state: String,
         loop_count: u16,
+        #[serde(default)]
         preload: bool
+    },
+    Sequence {
+        frames: Vec<SequenceFrame>,
+        mode: SequenceMode
     }
 }
 
@@ -75,9 +83,12 @@ pub struct Animation {
     pub frame_extension: String,
     pub frame_count: u32,
     pub fps: f64,
+    #[serde(default)]
     pub clear_screen: bool,
+    #[serde(default)]
     pub background_color: (u8, u8, u8),
     pub mode: AnimationMode,
+    #[serde(default)]
     pub upscale: bool
 }
 
@@ -87,16 +98,35 @@ pub enum AnimationMode {
     FromRAM
 }
 
+#[derive(Deserialize, Copy, Clone)]
+pub enum SequenceMode {
+    LoadAll,
+    LoadEach,
+    Preload
+}
+
+#[derive(Deserialize)]
+pub struct SequenceFrame {
+    pub name: String,
+    pub path: PathBuf,
+    pub width: u32,
+    pub height: u32,
+    #[serde(default)]
+    pub alpha: bool,
+    #[serde(default)]
+    pub upscale: bool,
+    pub duration: i64
+}
+
 #[derive(Deserialize)]
 pub struct Action {
-    display: String,
-    ty: ActionType
+    pub display: String,
+    pub ty: ActionType
 }
 
 #[derive(Deserialize)]
 pub enum ActionType {
-    SwitchState(String),
-    StartAnimation(String)
+    SwitchState(String)
 }
 
 impl BinaryRepr for Character {
@@ -106,6 +136,21 @@ impl BinaryRepr for Character {
             name: string_to_char_array(&self.name)?,
             species: string_to_char_array(&self.species)?,
             default_state: string_to_char_array(&self.default_state)?,
+        };
+
+        Ok(unsafe { any_as_u8_vec(&file) })
+    }
+}
+
+impl BinaryRepr for SequenceFrame {
+    fn to_bin(&self) -> Result<Vec<u8>, NulError> {
+        let file = bp_sequence_frame_file_s {
+            image_name: string_to_char_array(&self.name)?,
+            width: self.width,
+            height: self.height,
+            has_alpha: self.alpha,
+            upscale: self.upscale,
+            duration_us: self.duration,
         };
 
         Ok(unsafe { any_as_u8_vec(&file) })
@@ -200,8 +245,8 @@ impl BinaryRepr for State {
                     image: bp_character_state_image_u {
                         image: bp_character_image_descriptor_s {
                             image_name: string_to_char_array(name)?,
-                            width: *width,
-                            height: *height,
+                            width: if *upscale { *width / 2 } else { *width },
+                            height: if *upscale { *height / 2 } else { *height },
                             has_alpha: *alpha,
                             upscale: *upscale,
                             preload: *preload
@@ -218,6 +263,21 @@ impl BinaryRepr for State {
                             next_state: string_to_char_array(next_state)?,
                             loop_count: *loop_count,
                             preload: *preload
+                        }
+                    }
+                }
+            },
+            StateImage::Sequence { frames, mode } => {
+                bp_character_state_file_s {
+                    image_type: bp_character_state_image_e_BP_CHARACTER_STATE_SEQUENCE,
+                    image: bp_character_state_image_u {
+                        sequence: bp_character_state_sequence_descriptor_s {
+                            frame_count: frames.len() as u16,
+                            mode: match mode {
+                                SequenceMode::LoadAll => bp_character_sequence_mode_e_BP_CHARACTER_SEQUENCE_MODE_LOAD_ALL,
+                                SequenceMode::LoadEach => bp_character_sequence_mode_e_BP_CHARACTER_SEQUENCE_MODE_LOAD_EACH,
+                                SequenceMode::Preload => bp_character_sequence_mode_e_BP_CHARACTER_SEQUENCE_MODE_PRELOAD
+                            }
                         }
                     }
                 }
@@ -238,16 +298,6 @@ impl BinaryRepr for Action {
                     data: bp_character_action_u {
                         state_name: string_to_char_array(state)?
                     },
-                }
-            }
-
-            ActionType::StartAnimation(animation) => {
-                bp_character_action_file_s {
-                    display: string_to_char_array(&self.display)?,
-                    type_: bp_character_action_e_BP_CHARACTER_ACTION_START_ANIMATION,
-                    data: bp_character_action_u {
-                        animation: string_to_char_array(animation)?
-                    }
                 }
             }
         };

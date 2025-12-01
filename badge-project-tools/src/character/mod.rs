@@ -1,7 +1,7 @@
 use std::fs;
 use std::fs::File;
 use std::path::{Path, PathBuf};
-use tar::Header;
+use tar::{Builder, Header};
 use crate::character::repr::{BinaryRepr, Character, StateImage};
 use crate::image::encode_image_data;
 
@@ -28,19 +28,41 @@ fn append_vec<P: AsRef<Path>, T: std::io::Write>(builder: &mut tar::Builder<T>, 
     builder.append_data(&mut header, path, data)
 }
 
+fn save_image(char_path: impl AsRef<Path>, mut archive: &mut Builder<File>, name: &String, path: &PathBuf, width: u32, height: u32, alpha: bool, upscale: bool) -> anyhow::Result<()> {
+    let real_width = if upscale {
+        width / 2
+    } else {
+        width
+    };
+
+    let real_height = if upscale {
+        height / 2
+    } else {
+        height
+    };
+
+    let file = fs::read(path)?;
+    append_vec(
+        &mut archive,
+        PathBuf::from(char_path.as_ref()).join("images").join(format!("{name}.bin")),
+        &encode_image_data(&file, real_width, real_height, alpha, true)?
+    )?;
+    Ok(())
+}
+
 pub fn process_character(cli: CharacterCli) -> anyhow::Result<()> {
     let char: Character = serde_json::from_str(&fs::read_to_string(cli.input_file)?)?;
 
     let file = File::create(cli.output_file)?;
 
-    let char_path = format!("characters/{}", char.id);
+    let char_path = Path::new("characters").join(&char.id);
 
     let mut archive = tar::Builder::new(file);
-    append_vec(&mut archive, format!("{char_path}/character.bin"), &char.to_bin()?)?;
+    append_vec(&mut archive, char_path.join("character.bin"), &char.to_bin()?)?;
 
     for (state_name, state) in &char.states {
-        let state_path = format!("{char_path}/states/{state_name}");
-        append_vec(&mut archive, format!("{state_path}/state.bin"), &state.to_bin()?)?;
+        let state_path = char_path.join("states").join(state_name);
+        append_vec(&mut archive, state_path.join("state.bin"), &state.to_bin()?)?;
 
         if let StateImage::Single {
             name,
@@ -48,29 +70,40 @@ pub fn process_character(cli: CharacterCli) -> anyhow::Result<()> {
             width,
             height,
             alpha,
+            upscale,
             ..
         } = &state.image {
-            let file = fs::read(path)?;
-            append_vec(
-                &mut archive,
-                format!("{char_path}/images/{name}.bin"),
-                &encode_image_data(&file, *width, *height, *alpha, true)?
-            )?;
+            save_image(&char_path, &mut archive, name, path, *width, *height, *alpha, *upscale)?;
         }
 
-        let transitions_path = format!("{state_path}/transitions");
+        if let StateImage::Sequence {
+            frames,
+            ..
+        } = &state.image {
+            let frames_path = state_path.join("frames");
+            for (index, frame) in frames.iter().enumerate() {
+                // Save image file
+                save_image(&char_path, &mut archive, &frame.name, &frame.path, frame.width, frame.height, frame.alpha, frame.upscale)?;
+
+                // Save frame
+                let frame_path = frames_path.join(format!("{index}.bin"));
+                append_vec(&mut archive, frame_path, &frame.to_bin()?)?;
+            }
+        }
+
+        let transitions_path = state_path.join("transitions");
         for transition in &state.transitions {
             append_vec(
                 &mut archive,
-                format!("{transitions_path}/{}/transition.bin", transition.to_state),
+                transitions_path.join(&transition.to_state).join("transition.bin"),
                 &transition.to_bin()?
             )?;
         }
     }
 
     for (anim_name, anim) in &char.animations {
-        let anim_path = format!("{char_path}/animations/{anim_name}");
-        append_vec(&mut archive, format!("{anim_path}/animation.bin"), &anim.to_bin()?)?;
+        let anim_path = char_path.join("animations").join(anim_name);
+        append_vec(&mut archive, anim_path.join("animation.bin"), &anim.to_bin()?)?;
 
         for index in 1..=anim.frame_count {
             let image = fs::read(
@@ -82,15 +115,15 @@ pub fn process_character(cli: CharacterCli) -> anyhow::Result<()> {
 
             append_vec(
                 &mut archive,
-                format!("{anim_path}/frames/{index}.bin"),
+                anim_path.join("frames").join(format!("{index}.bin")),
                 &encode_image_data(&image, anim.real_width(), anim.real_height(), false, false)?
             )?;
         }
     }
 
     for (action_name, action) in &char.actions {
-        let action_path = format!("{char_path}/actions/{action_name}");
-        append_vec(&mut archive, format!("{action_path}/action.bin"), &action.to_bin()?)?;
+        let action_path = char_path.join("actions").join(action_name);
+        append_vec(&mut archive, action_path.join("action.bin"), &action.to_bin()?)?;
     }
 
     archive.finish()?;

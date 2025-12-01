@@ -14,7 +14,7 @@
 #include "init/bluetooth.hpp"
 
 constexpr auto TAG = "char_fsm";
-constexpr uint32_t TASK_STACK = 0x4000;
+constexpr uint32_t TASK_STACK = 0x2000;
 constexpr UBaseType_t TASK_PRIORITY = configMAX_PRIORITIES / 2;
 constexpr TickType_t TASK_INTERVAL = 100 / portTICK_PERIOD_MS;
 
@@ -29,6 +29,9 @@ class CharacterFSM {
 
     std::string current_state;
     int64_t last_transition_time = 0;
+    std::size_t current_sequence_index = -1;
+    int64_t next_frame_time = 0;
+
     portMUX_TYPE spinlock = portMUX_INITIALIZER_UNLOCKED;
 
     lv_img_dsc_t allocated_image_dsc{};
@@ -61,6 +64,7 @@ public:
     void load_character_sl(const std::string& name);
     bp::data::State get_current_state_sl();
     void switch_state_sl(const std::string& next_state);
+    bool invoke_action_sl(const std::string& action_id);
     void mark_dirty();
     void tick();
 
@@ -71,7 +75,8 @@ static CharacterFSM char_fsm;
 
 enum class ClientCommandType : uint8_t {
     GetAction,
-    GetActionDisplayName
+    GetActionDisplayName,
+    InvokeAction
 };
 
 bp::ClientCommandResponse bluetooth_command_handler(
@@ -109,6 +114,19 @@ bp::ClientCommandResponse bluetooth_command_handler(
                 ESP_LOGI(TAG, "returning unknown");
                 return {false, "Unknown action"};
             }
+        }
+
+        case ClientCommandType::InvokeAction: {
+            std::string action_id{data.data(), data.size()};
+            action_id.erase(std::ranges::find(action_id, '\0'), action_id.end());
+
+            ESP_LOGI(TAG, "InvokeAction(%s)", action_id.c_str());
+
+            if (char_fsm.invoke_action_sl(action_id)) {
+                return {true, ""};
+            }
+
+            return {false, "Unknown action"};
         }
 
         default:
@@ -179,8 +197,6 @@ void CharacterFSM::load_character_sl(const std::string& name) {
 
     bp::data::load_character_data(character_data, name);
     bp::data::preload_data(preloaded_data, character_data);
-    current_state = character_data.default_state;
-    last_transition_time = esp_timer_get_time();
 
     bp_characteristics->set_character_info(
         character_data.name,
@@ -188,7 +204,7 @@ void CharacterFSM::load_character_sl(const std::string& name) {
         character_data.actions.size()
     );
 
-    ESP_LOGI(TAG, "Starting state '%s'", current_state.c_str());
+    switch_state_sl(character_data.default_state);
 
     {
         CriticalGuard guard(&spinlock);
@@ -209,9 +225,25 @@ void CharacterFSM::switch_state_sl(const std::string& next_state) {
         CriticalGuard guard(&spinlock);
         current_state = next_state;
         last_transition_time = now;
+        current_sequence_index = -1;
+        next_frame_time = 0;
     }
 
     mark_dirty();
+}
+
+bool CharacterFSM::invoke_action_sl(const std::string& action_id) {
+    try {
+        const auto& [_, action] = char_fsm.character_data.actions.at(action_id);
+
+        if (const auto* switch_state = std::get_if<bp::data::ActionSwitchState>(&action)) {
+            switch_state_sl(switch_state->state_name);
+        }
+
+        return true;
+    } catch (const std::out_of_range&) {
+        return false;
+    }
 }
 
 void CharacterFSM::mark_dirty() {
@@ -357,17 +389,43 @@ void CharacterFSM::set_ui_image(const bp::data::StateImageVariant& variant) {
         play_animation(*anim_desc, animation);
 
         switch_state_sl(anim_desc->next_state);
+    } else if (const auto* sequence_desc = std::get_if<bp::data::StateSequence>(&variant)) {
+        // Check if new frame is required
+        if (esp_timer_get_time() > next_frame_time) {
+            // Sequence is empty!
+            if (sequence_desc->frames.empty()) {
+                next_frame_time = INT64_MAX;
+                return;
+            }
+
+            current_sequence_index++;
+            if (current_sequence_index >= sequence_desc->frames.size()) current_sequence_index = 0;
+
+            const auto& frame = sequence_desc->frames.at(current_sequence_index);
+
+            LVGLLockGuard guard(0);
+            lv_image_set_scale(image_obj, frame.upscale ? 512 : 256);
+
+            if (sequence_desc->mode == bp::data::SequenceLoadMode::Preload) {
+                const auto& [dsc, _] = preloaded_data.image_data.at(frame.image_name);
+                lv_image_set_src(image_obj, &dsc);
+            }
+            // TODO: Dynamic loading
+
+            next_frame_time = esp_timer_get_time() + frame.duration_us;
+        }
     }
 }
 
 void CharacterFSM::tick() {
     if (!is_ready_sl()) return;
 
-    const auto time_since_transition = esp_timer_get_time() - last_transition_time;
+    const auto now = esp_timer_get_time();
+    const auto time_since_transition = now - last_transition_time;
 
     const auto [image, transitions] = get_current_state_sl();
 
-    if (ui_dirty) {
+    if (ui_dirty || (current_sequence_index != -1 && now > next_frame_time)) {
         set_ui_image(image);
     }
 
@@ -394,6 +452,8 @@ void fsm_task_code() {
     }
 
     ESP_LOGI(TAG, "Loading '%s' character data...", selected_character_name->c_str());
+
+    heap_caps_print_heap_info(MALLOC_CAP_DEFAULT);
 
     char_fsm.load_character_sl(*selected_character_name);
 
