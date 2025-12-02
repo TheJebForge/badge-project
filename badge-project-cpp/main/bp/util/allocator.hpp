@@ -6,14 +6,14 @@
 #include "sdkconfig.h"
 
 template <class T>
-class PSRAMAllocator : std::allocator<T>
+class PsramAllocator : std::allocator<T>
 {
 public:
     using value_type = T;
 
-    PSRAMAllocator() noexcept = default;
+    PsramAllocator() noexcept = default;
 
-    template <class U> constexpr explicit PSRAMAllocator(const PSRAMAllocator<U>&) noexcept
+    template <class U> constexpr explicit PsramAllocator(const PsramAllocator<U>&) noexcept
     {
     }
 
@@ -43,13 +43,16 @@ public:
 };
 
 template <class T, class U>
-bool operator==(const PSRAMAllocator<T>&, const PSRAMAllocator<U>&)
+bool operator==(const PsramAllocator<T>&, const PsramAllocator<U>&)
 {
     return true;
 }
 
 template <class T, class U>
-bool operator!=(const PSRAMAllocator<T>& x, const PSRAMAllocator<U>& y)
+bool operator!=(const PsramAllocator<T>& x, const PsramAllocator<U>& y)
 {
     return !(x == y);
 }
+
+template <typename T>
+using StdVectorPsramAlloc = std::vector<T, PsramAllocator<T>>;

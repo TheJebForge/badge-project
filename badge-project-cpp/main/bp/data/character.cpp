@@ -11,9 +11,6 @@
 namespace fs = std::filesystem;
 
 constexpr auto TAG = "bp_data";
-constexpr auto CHARACTERS_PATH = "/sdcard/characters";
-
-constexpr uint32_t ANIMATION_BYTES_PER_PIXEL = 2;
 
 namespace bp::data {
     std::vector<std::string> list_characters() {
@@ -440,7 +437,7 @@ namespace bp::data {
 
                 {
                     const fs::path image_filename = frames_folder / std::format("{}.bin", frame_index);
-                    auto image_file = std::make_unique<std::ifstream>(image_filename);
+                    const auto image_file = std::make_unique<std::ifstream>(image_filename);
                     image_file->read(
                         reinterpret_cast<std::istream::char_type*>(frame.data()),
                         static_cast<std::streamsize>(data_size)

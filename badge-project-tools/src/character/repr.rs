@@ -87,9 +87,14 @@ pub struct Animation {
     pub clear_screen: bool,
     #[serde(default)]
     pub background_color: (u8, u8, u8),
+    #[serde(default = "default_animation_mode")]
     pub mode: AnimationMode,
     #[serde(default)]
     pub upscale: bool
+}
+
+fn default_animation_mode() -> AnimationMode {
+    AnimationMode::FromRAM
 }
 
 #[derive(Deserialize, Copy, Clone)]

@@ -12,6 +12,9 @@
 #include "../util/allocator.hpp"
 
 namespace bp::data {
+    constexpr auto CHARACTERS_PATH = "/sdcard/characters";
+    constexpr uint32_t ANIMATION_BYTES_PER_PIXEL = 2;
+
     struct StateTransitionElapsedTime {
         int64_t duration_us;
     };
@@ -120,7 +123,9 @@ namespace bp::data {
 
 
 
-    using ImageDataVec = std::vector<uint8_t, PSRAMAllocator<uint8_t>>;
+    using ImageDataVec = std::vector<uint8_t, PsramAllocator<uint8_t>>;
+
+    lv_image_dsc_t make_image_dsc(bool has_alpha, uint32_t width, uint32_t height, const ImageDataVec& image_data);
 
     struct PreloadedData {
         StrMap<std::tuple<lv_image_dsc_t, ImageDataVec>> image_data;
