@@ -1,5 +1,6 @@
 set(PROJECT_SOURCES
         bp/data/character.cpp
+        bp/data/image.cpp
         bp/init/bluetooth.cpp
         bp/init/sdcard.cpp
         bp/init/display.cpp

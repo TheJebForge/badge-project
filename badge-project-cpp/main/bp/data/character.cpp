@@ -13,6 +13,66 @@ namespace fs = std::filesystem;
 constexpr auto TAG = "bp_data";
 
 namespace bp::data {
+    bool StateImage::image_exists(const Character& character) const {
+        return character.image_exists(image_name);
+    }
+
+    std::size_t StateImage::get_image_size(const Character& character) const {
+        return character.get_image_size(image_name);
+    }
+
+    void StateImage::load_image(const Character& character, const std::span<uint8_t> buffer) const {
+        character.load_image(buffer, image_name);
+    }
+
+    void StateAnimation::load_frame(const std::span<uint8_t> buffer, const std::size_t index) const {
+        load_image_data(buffer, frames_folder / std::format("{}.bin", index));
+    }
+
+    bool SequenceFrame::image_exists(const Character& character) const {
+        return character.image_exists(image_name);
+    }
+
+    std::size_t SequenceFrame::get_image_size(const Character& character) const {
+        return character.get_image_size(image_name);
+    }
+
+    void SequenceFrame::load_image(const Character& character, const std::span<uint8_t> buffer) const {
+        character.load_image(buffer, image_name);
+    }
+
+    bool StateSequence::frame_exists(const Character& character, const std::size_t index) const {
+        return character.image_exists(frames[index].image_name);
+    }
+
+    std::size_t StateSequence::get_frame_size(const Character& character, const std::size_t index) const {
+        return character.get_image_size(frames[index].image_name);
+    }
+
+    void StateSequence::load_frame(
+        const Character& character,
+        const std::span<uint8_t> buffer,
+        const std::size_t index
+    ) const {
+        character.load_image(buffer, frames[index].image_name);
+    }
+
+    std::filesystem::path Character::get_image_path(const std::string& name) const {
+        return images_folder / std::format("{}.bin", name);
+    }
+
+    bool Character::image_exists(const std::string& name) const {
+        return fs::exists(get_image_path(name));
+    }
+
+    std::size_t Character::get_image_size(const std::string& name) const {
+        return fs::file_size(get_image_path(name));
+    }
+
+    void Character::load_image(const std::span<uint8_t> buffer, const std::string& name) const {
+        load_image_data(buffer, get_image_path(name));
+    }
+
     std::vector<std::string> list_characters() {
         std::vector<std::string> names{};
 
@@ -98,6 +158,9 @@ namespace bp::data {
             character.name = character_struct.name;
             character.species = character_struct.species;
             character.default_state = character_struct.default_state;
+            character.folder = char_folder;
+            character.images_folder = char_folder / "images";
+            character.animations_folder = char_folder / "animations";
         }
 
         StrMap<State>& states = character.states;
@@ -144,7 +207,8 @@ namespace bp::data {
                             .name = name,
                             .next_state = next_state,
                             .loop_count = loop_count,
-                            .preload = preload
+                            .preload = preload,
+                            .frames_folder = character.animations_folder / name / "frames"
                         };
                         break;
                     }
@@ -245,8 +309,8 @@ namespace bp::data {
         StrMap<Animation>& animations = character.animations;
         animations.clear();
 
-        if (const fs::path animations_folder = char_folder / "animations"; fs::exists(animations_folder)) {
-            for (const auto& animation_entry: fs::directory_iterator{animations_folder}) {
+        if (fs::exists(character.animations_folder)) {
+            for (const auto& animation_entry: fs::directory_iterator{character.animations_folder}) {
                 if (!animation_entry.is_directory()) continue;
 
                 bp_character_animation_file_s animation_struct{};
@@ -358,11 +422,36 @@ namespace bp::data {
         };
     }
 
+    lv_image_dsc_t make_image_dsc(
+        const bool has_alpha, const uint32_t width, const uint32_t height,
+        const image::SharedAllocatedImageData& image_data
+    ) {
+        return {
+            .header{
+                .magic = LV_IMAGE_HEADER_MAGIC,
+                .cf = static_cast<uint32_t>(has_alpha ? LV_COLOR_FORMAT_RGB565A8 : LV_COLOR_FORMAT_RGB565),
+                .w = width,
+                .h = height
+            },
+            .data_size = static_cast<uint32_t>(image_data->len()),
+            .data = image_data->data()
+        };
+    }
+
+    void load_image_data(std::span<uint8_t> buffer, const std::filesystem::path& path) {
+        const auto image_file = std::make_unique<std::ifstream>(path);
+        image_file->read(
+            reinterpret_cast<std::istream::char_type*>(buffer.data()),
+            static_cast<std::streamsize>(buffer.size_bytes())
+        );
+        image_file->close();
+    }
+
     void preload_image(
         PreloadedData& preloaded_data, const std::string& image_name, const fs::path& images_folder,
         const bool has_alpha, const uint32_t width, const uint32_t height
     ) {
-        ImageDataVec image_data{};
+        image::SharedAllocatedImageData image_data;
 
         {
             uintmax_t file_size = 0;
@@ -370,18 +459,13 @@ namespace bp::data {
 
             file_size = fs::file_size(image_filename);
 
-            if (heap_caps_get_largest_free_block(MALLOC_CAP_SPIRAM) < file_size) {
+            if (const auto opt_image = image::allocator.allocate_image_data_sl(file_size)) {
+                image_data = std::move(opt_image.value());
+            } else {
                 throw data_exception{Error::OutOfRAM};
             }
 
-            image_data.resize(file_size);
-
-            const auto image_file = std::make_unique<std::ifstream>(image_filename);
-            image_file->read(
-                reinterpret_cast<std::istream::char_type*>(image_data.data()),
-                static_cast<std::streamsize>(file_size)
-            );
-            image_file->close();
+            load_image_data(image_data->span(), image_filename);
         }
 
         preloaded_data.image_data.emplace(
@@ -391,30 +475,26 @@ namespace bp::data {
     }
 
     void preload_data(PreloadedData& preloaded_data, const Character& character) {
-        const fs::path char_folder{std::format("{}/{}", CHARACTERS_PATH, character.id)};
-
-        for (const fs::path images_folder = char_folder / "images";
-             const auto& [_, state]: character.states) {
+        for (const auto& [_, state]: character.states) {
             if (const auto* image = std::get_if<StateImage>(&state.image)) {
                 if (!image->preload) continue;
                 preload_image(
-                    preloaded_data, image->image_name, images_folder,
+                    preloaded_data, image->image_name, character.images_folder,
                     image->has_alpha, image->width, image->height
                 );
             } else if (const auto* sequence = std::get_if<StateSequence>(&state.image)) {
                 if (sequence->mode != SequenceLoadMode::Preload) continue;
 
-                for (const auto& frame : sequence->frames) {
+                for (const auto& frame: sequence->frames) {
                     preload_image(
-                        preloaded_data, frame.image_name, images_folder,
+                        preloaded_data, frame.image_name, character.images_folder,
                         frame.has_alpha, frame.width, frame.height
                     );
                 }
             }
         }
 
-        for (const fs::path animations_folder = char_folder / "animations";
-             const auto& [_, state]: character.states) {
+        for (const auto& [_ignore1, state]: character.states) {
             if (!std::holds_alternative<StateAnimation>(state.image)) continue;
 
             const auto& state_anim = std::get<StateAnimation>(state.image);
@@ -423,32 +503,28 @@ namespace bp::data {
             const auto& anim_desc = character.animations.at(state_anim.name);
             const auto data_size = anim_desc.width * anim_desc.height * ANIMATION_BYTES_PER_PIXEL;
 
-            const fs::path frames_folder = animations_folder / state_anim.name / "frames";
+            const auto [inserted, _ignore2] = preloaded_data.animation_frames.emplace(
+                state_anim.name,
+                std::vector<image::SharedAllocatedImageData>()
+            );
 
-            std::vector<ImageDataVec> frames{};
+            auto& frames = inserted->second;
             frames.reserve(anim_desc.frame_count);
 
             for (int frame_index = 1; frame_index <= anim_desc.frame_count; frame_index++) {
-                if (heap_caps_get_largest_free_block(MALLOC_CAP_SPIRAM) < data_size) {
+                image::SharedAllocatedImageData frame;
+                if (const auto opt_image = image::allocator.allocate_image_data_sl(data_size)) {
+                    frame = std::move(opt_image.value());
+                } else {
                     throw data_exception{Error::OutOfRAM};
                 }
 
-                ImageDataVec frame(static_cast<std::size_t>(data_size));
+                ESP_LOGI(TAG, "Allocated %x-%x for %s #%d", frame->start(), frame->end(), state_anim.name.c_str(), frame_index);
 
-                {
-                    const fs::path image_filename = frames_folder / std::format("{}.bin", frame_index);
-                    const auto image_file = std::make_unique<std::ifstream>(image_filename);
-                    image_file->read(
-                        reinterpret_cast<std::istream::char_type*>(frame.data()),
-                        static_cast<std::streamsize>(data_size)
-                    );
-                    image_file->close();
-                }
+                state_anim.load_frame(frame->span(), frame_index);
 
                 frames.emplace_back(std::move(frame));
             }
-
-            preloaded_data.animation_frames.emplace(state_anim.name, std::move(frames));
         }
     }
 

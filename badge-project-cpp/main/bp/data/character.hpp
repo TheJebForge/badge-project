@@ -1,5 +1,6 @@
 #pragma once
 
+#include <filesystem>
 #include <memory>
 #include <string>
 #include <map>
@@ -9,11 +10,16 @@
 
 #include <lvgl.h>
 
+#include "character.hpp"
+#include "character.hpp"
+#include "image.hpp"
 #include "../util/allocator.hpp"
 
 namespace bp::data {
     constexpr auto CHARACTERS_PATH = "/sdcard/characters";
     constexpr uint32_t ANIMATION_BYTES_PER_PIXEL = 2;
+
+    struct Character;
 
     struct StateTransitionElapsedTime {
         int64_t duration_us;
@@ -33,6 +39,10 @@ namespace bp::data {
         bool has_alpha;
         bool upscale;
         bool preload;
+
+        bool image_exists(const Character& character) const;
+        std::size_t get_image_size(const Character& character) const;
+        void load_image(const Character& character, std::span<uint8_t> buffer) const;
     };
 
     struct StateAnimation {
@@ -40,6 +50,9 @@ namespace bp::data {
         std::string next_state;
         uint16_t loop_count;
         bool preload;
+        std::filesystem::path frames_folder;
+
+        void load_frame(std::span<uint8_t> buffer, std::size_t index) const;
     };
 
     struct SequenceFrame {
@@ -49,6 +62,10 @@ namespace bp::data {
         bool has_alpha;
         bool upscale;
         int64_t duration_us;
+
+        bool image_exists(const Character& character) const;
+        std::size_t get_image_size(const Character& character) const;
+        void load_image(const Character& character, std::span<uint8_t> buffer) const;
     };
 
     enum class SequenceLoadMode {
@@ -60,6 +77,10 @@ namespace bp::data {
     struct StateSequence {
         std::vector<SequenceFrame> frames;
         SequenceLoadMode mode;
+
+        bool frame_exists(const Character& character, std::size_t index) const;
+        std::size_t get_frame_size(const Character& character, std::size_t index) const;
+        void load_frame(const Character& character, std::span<uint8_t> buffer, std::size_t index) const;
     };
 
     using StateImageVariant = std::variant<std::monostate, StateImage, StateAnimation, StateSequence>;
@@ -88,6 +109,7 @@ namespace bp::data {
         uint16_t background_color;
         AnimationMode mode;
         bool upscale;
+        std::filesystem::path folder;
     };
 
     struct ActionSwitchState {
@@ -107,6 +129,14 @@ namespace bp::data {
         StrMap<State> states;
         StrMap<Animation> animations;
         std::map<std::string, Action> actions;
+        std::filesystem::path folder;
+        std::filesystem::path animations_folder;
+        std::filesystem::path images_folder;
+
+        std::filesystem::path get_image_path(const std::string& name) const;
+        bool image_exists(const std::string& name) const;
+        std::size_t get_image_size(const std::string& name) const;
+        void load_image(std::span<uint8_t> buffer, const std::string& name) const;
     };
 
     std::vector<std::string> list_characters();
@@ -121,15 +151,16 @@ namespace bp::data {
     std::optional<Character> load_selected_character();
     std::optional<Character> load_selected_character(const std::vector<std::string>& characters);
 
-
-
     using ImageDataVec = std::vector<uint8_t, PsramAllocator<uint8_t>>;
 
     lv_image_dsc_t make_image_dsc(bool has_alpha, uint32_t width, uint32_t height, const ImageDataVec& image_data);
+    lv_image_dsc_t make_image_dsc(bool has_alpha, uint32_t width, uint32_t height, const image::SharedAllocatedImageData& image_data);
+
+    void load_image_data(std::span<uint8_t> buffer, const std::filesystem::path& path);
 
     struct PreloadedData {
-        StrMap<std::tuple<lv_image_dsc_t, ImageDataVec>> image_data;
-        StrMap<std::vector<ImageDataVec>> animation_frames;
+        StrMap<std::tuple<lv_image_dsc_t, image::SharedAllocatedImageData>> image_data;
+        StrMap<std::vector<image::SharedAllocatedImageData>> animation_frames;
     };
 
     /// @throws data_exception If there's not enough RAM

@@ -158,6 +158,7 @@ extern "C" void app_main(void) {
     // lv_label_set_text(label, "kekw");
     // lv_obj_align(label, LV_ALIGN_CENTER, 0, 0);
 
+    heap_caps_print_heap_info(MALLOC_CAP_DEFAULT);
     bp::start_fsm_task();
 }
 

@@ -600,6 +600,12 @@ CONFIG_PARTITION_TABLE_MD5=y
 # end of Partition Table
 
 #
+# BP Project
+#
+CONFIG_IMAGE_STATIC_STORAGE_SIZE=7000
+# end of BP Project
+
+#
 # Compiler options
 #
 CONFIG_COMPILER_OPTIMIZATION_DEBUG=y

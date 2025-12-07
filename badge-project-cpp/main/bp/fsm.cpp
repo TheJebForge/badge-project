@@ -7,7 +7,6 @@
 #include "data/character.hpp"
 #include "freertos/FreeRTOS.h"
 #include "esp_timer.h"
-#include "init/bluetooth.hpp"
 #include "init/display.hpp"
 #include "misc/lv_event_private.h"
 #include "util/critical.hpp"
@@ -25,103 +24,14 @@ constexpr auto PROGRESS_BAR_HEIGHT = 3;
 constexpr uint32_t COOKER_STACK = 0x1000;
 constexpr TickType_t COOKER_LOAD_DELAY = 30 / portTICK_PERIOD_MS;
 
+using namespace bp;
 namespace fs = std::filesystem;
 
 static TaskHandle_t fsm_task_handle;
 
-class CharacterFSM {
-    bool ready = false;
-    bool busy = false;
-
-    // Character data
-    bp::data::Character character_data;
-    bp::data::PreloadedData preloaded_data;
-
-    // FSM State
-    std::string current_state;
-    int64_t last_transition_time = 0;
-    std::size_t current_sequence_index = -1;
-    int64_t next_frame_time = 0;
-
-    std::string being_cooked_state;
-    bool state_is_cooking = false;
-
-    // FSM Image data
-    StdVectorPsramAlloc<lv_image_dsc_t> prepared_descriptors{};
-    StdVectorPsramAlloc<bp::data::ImageDataVec> prepared_images{};
-    StdVectorPsramAlloc<lv_image_dsc_t> loaded_descriptors{};
-    StdVectorPsramAlloc<bp::data::ImageDataVec> loaded_images{};
-
-    // UI Objects
-    lv_obj_t* screen_obj = nullptr;
-    lv_obj_t* char_name_obj = nullptr;
-    lv_obj_t* image_obj = nullptr;
-    lv_obj_t* progress_box_obj = nullptr;
-    lv_obj_t* progress_bar_obj = nullptr;
-    lv_obj_t* error_box_obj = nullptr;
-    lv_obj_t* error_text_obj = nullptr;
-    bool ui_dirty = false;
-
-    // Synchronization
-    portMUX_TYPE spinlock = portMUX_INITIALIZER_UNLOCKED;
-
-    class BusyLock {
-        bool still_holding;
-        CharacterFSM* parent;
-
-    public:
-        explicit BusyLock(CharacterFSM* parent);
-        void free();
-        ~BusyLock();
-    };
-
-    bool is_free_sl();
-    bool is_busy_sl();
-    bool is_cooking_sl();
-    BusyLock get_busy_sl();
-    void wait_until_free_sl();
-    void play_animation(
-        const bp::data::StateAnimation& state_desc, const bp::data::Animation& animation_desc
-    ) const;
-    void set_ui_image(const bp::data::StateImageVariant& variant);
-
-    void switch_state_internal(const std::string& state_name);
-
-    bool cook_if_needed(const std::string& state_name) const;
-    void set_progress_visible(bool visibility) const;
-    void set_cooking_progress(int32_t current, int32_t max) const;
-    void done_cooking_sl(bool success);
-
-    void display_error(const std::string& error) const;
-
-public:
-    bool alive = true;
-
-    void create_ui();
-    bool is_ready_sl();
-    void load_character_sl(const std::string& name);
-    bp::data::State get_current_state_sl();
-    void switch_state_sl(const std::string& next_state);
-    void switch_to_default_sl();
-    bool invoke_action_sl(const std::string& action_id);
-    void mark_dirty();
-    void tick();
-
-    friend bp::ClientCommandResponse bluetooth_command_handler(uint8_t, std::span<char, 200>);
-    friend void single_image_cooker(const bp::data::StateImage* image_state);
-    friend void animation_cooker(const bp::data::StateAnimation* anim_state);
-    friend void sequence_cooker(const bp::data::StateSequence* sequence);
-};
-
 static CharacterFSM char_fsm;
 
-enum class ClientCommandType : uint8_t {
-    GetAction,
-    GetActionDisplayName,
-    InvokeAction
-};
-
-bp::ClientCommandResponse bluetooth_command_handler(
+ClientCommandResponse bp::bluetooth_command_handler(
     uint8_t op, const std::span<char, 200> data
 ) {
     switch (static_cast<ClientCommandType>(op)) {
@@ -184,7 +94,7 @@ void image_clicked(lv_event_t* event) {
 
     for (const auto [_, transitions] = instance->get_current_state_sl();
          const auto& [next_state, trigger]: transitions) {
-        if (std::holds_alternative<bp::data::StateTransitionClicked>(trigger)) {
+        if (std::holds_alternative<data::StateTransitionClicked>(trigger)) {
             instance->switch_state_sl(next_state);
         }
     }
@@ -196,7 +106,7 @@ void CharacterFSM::create_ui() {
         screen_obj = lv_obj_create(nullptr);
 
         lv_obj_t* header = lv_obj_create(screen_obj);
-        lv_obj_set_size(header, bp::DISPLAY_WIDTH, bp::DISPLAY_HEIGHT - bp::DISPLAY_WIDTH);
+        lv_obj_set_size(header, DISPLAY_WIDTH, DISPLAY_HEIGHT - DISPLAY_WIDTH);
         lv_obj_set_layout(header, LV_LAYOUT_FLEX);
         lv_obj_set_flex_flow(header, LV_FLEX_FLOW_COLUMN);
         lv_obj_set_flex_align(header, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
@@ -209,18 +119,18 @@ void CharacterFSM::create_ui() {
         lv_label_set_text(char_name_obj, character_data.name.c_str());
 
         lv_obj_t* image_button = lv_button_create(screen_obj);
-        lv_obj_set_pos(image_button, 0, bp::DISPLAY_HEIGHT - bp::DISPLAY_WIDTH);
-        lv_obj_set_size(image_button, bp::DISPLAY_WIDTH, bp::DISPLAY_WIDTH);
+        lv_obj_set_pos(image_button, 0, DISPLAY_HEIGHT - DISPLAY_WIDTH);
+        lv_obj_set_size(image_button, DISPLAY_WIDTH, DISPLAY_WIDTH);
         lv_obj_add_event_cb(image_button, image_clicked, LV_EVENT_CLICKED, this);
 
         image_obj = lv_image_create(image_button);
-        lv_obj_set_size(image_obj, bp::DISPLAY_WIDTH, bp::DISPLAY_WIDTH);
+        lv_obj_set_size(image_obj, DISPLAY_WIDTH, DISPLAY_WIDTH);
         lv_obj_center(image_obj);
         lv_image_set_antialias(image_obj, false);
 
         progress_box_obj = lv_obj_create(screen_obj);
-        lv_obj_set_size(progress_box_obj, bp::DISPLAY_WIDTH, PROGRESS_BAR_HEIGHT);
-        lv_obj_set_pos(progress_box_obj, 0, bp::DISPLAY_HEIGHT - PROGRESS_BAR_HEIGHT);
+        lv_obj_set_size(progress_box_obj, DISPLAY_WIDTH, PROGRESS_BAR_HEIGHT);
+        lv_obj_set_pos(progress_box_obj, 0, DISPLAY_HEIGHT - PROGRESS_BAR_HEIGHT);
         lv_obj_set_flag(progress_box_obj, LV_OBJ_FLAG_SCROLLABLE, false);
         lv_obj_set_flag(progress_box_obj, LV_OBJ_FLAG_HIDDEN, true);
         lv_obj_set_style_pad_all(progress_box_obj, 0, 0);
@@ -231,8 +141,8 @@ void CharacterFSM::create_ui() {
 
         constexpr auto ERROR_HEIGHT = 40;
         error_box_obj = lv_obj_create(screen_obj);
-        lv_obj_set_size(error_box_obj, bp::DISPLAY_WIDTH, ERROR_HEIGHT);
-        lv_obj_set_pos(error_box_obj, 0, bp::DISPLAY_HEIGHT - ERROR_HEIGHT);
+        lv_obj_set_size(error_box_obj, DISPLAY_WIDTH, ERROR_HEIGHT);
+        lv_obj_set_pos(error_box_obj, 0, DISPLAY_HEIGHT - ERROR_HEIGHT);
         lv_obj_set_flag(error_box_obj, LV_OBJ_FLAG_SCROLLABLE, false);
         lv_obj_set_flag(error_box_obj, LV_OBJ_FLAG_HIDDEN, true);
 
@@ -276,15 +186,22 @@ void CharacterFSM::load_character_sl(const std::string& name) {
     }
 }
 
-bp::data::State CharacterFSM::get_current_state_sl() {
+data::State CharacterFSM::get_current_state_sl() {
     CriticalGuard guard{&spinlock};
     return character_data.states.at(current_state);
+}
+
+static portMUX_TYPE checker_spinlock = portMUX_INITIALIZER_UNLOCKED;
+
+bool check_if_no_ram_sl(const std::size_t wanted_ram) {
+    CriticalGuard guard(&checker_spinlock);
+    return heap_caps_get_largest_free_block(MALLOC_CAP_SPIRAM) < wanted_ram;
 }
 
 static TaskHandle_t cooker_task_handle;
 
 constexpr auto IMG_TAG = "single_image_cooker";
-void single_image_cooker(const bp::data::StateImage* image_state) {
+void bp::single_image_cooker(const data::StateImage* image_state) {
     TaskDeleteGuard guard{};
     ESP_LOGI(IMG_TAG, "Cooking an image...");
 
@@ -294,44 +211,33 @@ void single_image_cooker(const bp::data::StateImage* image_state) {
     frames.clear();
     descriptors.clear();
 
-    const fs::path images_folder{
-        std::format(
-            "{}/{}/images",
-            bp::data::CHARACTERS_PATH,
-            char_fsm.character_data.id
-        )
-    };
-
-    auto& inserted_image = frames.emplace_back();
+    image::SharedAllocatedImageData inserted_image;
 
     {
-        const fs::path image_filename = images_folder / std::format("{}.bin", image_state->image_name);
-
-        if (!fs::exists(image_filename)) {
-            ESP_LOGE(IMG_TAG, "Image at '%s' not found!", image_filename.c_str());
+        if (!image_state->image_exists(char_fsm.character_data)) {
+            ESP_LOGE(IMG_TAG, "Image '%s' not found!", image_state->image_name.c_str());
             char_fsm.done_cooking_sl(false);
             return;
         }
 
-        const auto file_size = fs::file_size(image_filename);
+        const auto file_size = image_state->get_image_size(char_fsm.character_data);
 
-        if (heap_caps_get_largest_free_block(MALLOC_CAP_SPIRAM) < file_size) {
-            throw bp::data::data_exception{bp::data::Error::OutOfRAM};
+        if (const auto opt_image = image::allocator.allocate_image_data_sl(file_size)) {
+            inserted_image = opt_image.value();
+        } else {
+            ESP_LOGE(IMG_TAG, "Failed to allocate %d bytes!", file_size);
+            char_fsm.done_cooking_sl(false);
+            return;
         }
 
-        inserted_image.resize(file_size);
-
-        const auto image_file = std::make_unique<std::ifstream>(image_filename);
-        image_file->read(
-            reinterpret_cast<std::istream::char_type*>(inserted_image.data()),
-            static_cast<std::streamsize>(file_size)
-        );
-        image_file->close();
+        image_state->load_image(char_fsm.character_data, inserted_image->span());
     }
 
-    descriptors.emplace_back(bp::data::make_image_dsc(
+    descriptors.emplace_back(data::make_image_dsc(
         image_state->has_alpha, image_state->width, image_state->height, inserted_image
     ));
+
+    frames.emplace_back(std::move(inserted_image));
 
     char_fsm.set_cooking_progress(1, 1);
 
@@ -340,7 +246,7 @@ void single_image_cooker(const bp::data::StateImage* image_state) {
 }
 
 constexpr auto ANIM_TAG = "animation_cooker";
-void animation_cooker(const bp::data::StateAnimation* anim_state) {
+void bp::animation_cooker(const data::StateAnimation* anim_state) {
     TaskDeleteGuard guard{};
     ESP_LOGI(ANIM_TAG, "Cooking an animation...");
 
@@ -350,33 +256,24 @@ void animation_cooker(const bp::data::StateAnimation* anim_state) {
     frames.clear();
     frames.reserve(anim_desc.frame_count);
 
-    const fs::path frames_folder{
-        std::format(
-            "{}/{}/animations/{}/frames",
-            bp::data::CHARACTERS_PATH,
-            char_fsm.character_data.id,
-            anim_state->name
-        )
-    };
-
-    const auto data_size = anim_desc.width * anim_desc.height * bp::data::ANIMATION_BYTES_PER_PIXEL;
+    const auto data_size = anim_desc.width * anim_desc.height * data::ANIMATION_BYTES_PER_PIXEL;
 
     for (std::size_t frame_index = 1; frame_index <= anim_desc.frame_count; frame_index++) {
-        if (heap_caps_get_largest_free_block(MALLOC_CAP_SPIRAM) < data_size) {
-            throw bp::data::data_exception{bp::data::Error::OutOfRAM};
+        image::SharedAllocatedImageData inserted_image;
+
+        if (const auto opt_image = image::allocator.allocate_image_data_sl(data_size)) {
+            inserted_image = opt_image.value();
+        } else {
+            ESP_LOGE(ANIM_TAG, "Failed to allocate %d bytes!", data_size);
+            char_fsm.done_cooking_sl(false);
+            return;
         }
 
-        auto& inserted_image = char_fsm.prepared_images.emplace_back(data_size);
+        ESP_LOGI(ANIM_TAG, "Allocated at %x-%x for #%d frame", inserted_image->start(), inserted_image->end(), frame_index);
 
-        {
-            const fs::path image_filename = frames_folder / std::format("{}.bin", frame_index);
-            const auto image_file = std::make_unique<std::ifstream>(image_filename);
-            image_file->read(
-                reinterpret_cast<std::istream::char_type*>(inserted_image.data()),
-                static_cast<std::streamsize>(data_size)
-            );
-            image_file->close();
-        }
+        anim_state->load_frame(inserted_image->span(), frame_index);
+
+        frames.emplace_back(std::move(inserted_image));
 
         char_fsm.set_cooking_progress(frame_index, static_cast<int32_t>(anim_desc.frame_count));
         vTaskDelay(COOKER_LOAD_DELAY);
@@ -387,7 +284,7 @@ void animation_cooker(const bp::data::StateAnimation* anim_state) {
 }
 
 constexpr auto SEQ_TAG = "sequence_cooker";
-void sequence_cooker(const bp::data::StateSequence* sequence) {
+void bp::sequence_cooker(const data::StateSequence* sequence) {
     TaskDeleteGuard guard{};
     ESP_LOGI(SEQ_TAG, "Cooking a sequence...");
 
@@ -397,81 +294,83 @@ void sequence_cooker(const bp::data::StateSequence* sequence) {
     frames.clear();
     descriptors.clear();
 
-    const fs::path images_folder{
-        std::format(
-            "{}/{}/images",
-            bp::data::CHARACTERS_PATH,
-            char_fsm.character_data.id
-        )
-    };
-
-    if (sequence->mode == bp::data::SequenceLoadMode::LoadAll) {
+    if (sequence->mode == data::SequenceLoadMode::LoadAll) {
         frames.reserve(sequence->frames.size());
         descriptors.reserve(sequence->frames.size());
 
         for (std::size_t frame_index = 0; frame_index < sequence->frames.size(); frame_index++) {
             const auto& seq_frame = sequence->frames.at(frame_index);
-            auto& inserted_image = frames.emplace_back();
+            image::SharedAllocatedImageData inserted_image;
 
             {
-                const fs::path image_filename = images_folder / std::format("{}.bin", seq_frame.image_name);
-                const auto file_size = fs::file_size(image_filename);
-
-                if (heap_caps_get_largest_free_block(MALLOC_CAP_SPIRAM) < file_size) {
-                    throw bp::data::data_exception{bp::data::Error::OutOfRAM};
+                if (!seq_frame.image_exists(char_fsm.character_data)) {
+                    ESP_LOGE(SEQ_TAG, "Image '%s' not found!", seq_frame.image_name.c_str());
+                    char_fsm.done_cooking_sl(false);
+                    return;
                 }
 
-                inserted_image.resize(file_size);
+                const auto file_size = seq_frame.get_image_size(char_fsm.character_data);
 
-                const auto image_file = std::make_unique<std::ifstream>(image_filename);
-                image_file->read(
-                    reinterpret_cast<std::istream::char_type*>(inserted_image.data()),
-                    static_cast<std::streamsize>(file_size)
-                );
-                image_file->close();
+                if (const auto opt_image = image::allocator.allocate_image_data_sl(file_size)) {
+                    inserted_image = opt_image.value();
+                } else {
+                    ESP_LOGE(SEQ_TAG, "Failed to allocate %d bytes!", file_size);
+                    char_fsm.done_cooking_sl(false);
+                    return;
+                }
+
+                seq_frame.load_image(char_fsm.character_data, inserted_image->span());
             }
 
-            descriptors.emplace_back(bp::data::make_image_dsc(
+            descriptors.emplace_back(data::make_image_dsc(
                 seq_frame.has_alpha, seq_frame.width, seq_frame.height, inserted_image
             ));
+
+            frames.emplace_back(std::move(inserted_image));
 
             char_fsm.set_cooking_progress(frame_index + 1, sequence->frames.size());
             vTaskDelay(COOKER_LOAD_DELAY);
         }
-    } else if (sequence->mode == bp::data::SequenceLoadMode::LoadEach && !sequence->frames.empty()) {
-        frames.resize(2);
+    } else if (sequence->mode == data::SequenceLoadMode::LoadEach && !sequence->frames.empty()) {
+        std::size_t largest_frame_size = 0;
+        for (const auto& seq_frame: sequence->frames) {
+            if (
+                auto size = seq_frame.get_image_size(char_fsm.character_data);
+                size > largest_frame_size
+            ) {
+                largest_frame_size = size;
+            }
+        }
+
+        for (std::size_t index = 0; index < 2; index++) {
+            if (const auto opt_image = image::allocator.allocate_image_data_sl(largest_frame_size)) {
+                ESP_LOGI(SEQ_TAG, "Allocated %x-%x for sequence buffer #%d", opt_image.value()->start(), opt_image.value()->end(), index);
+                frames.emplace_back(std::move(opt_image.value()));
+            } else {
+                ESP_LOGE(SEQ_TAG, "Failed to allocate %d bytes!", largest_frame_size);
+                char_fsm.done_cooking_sl(false);
+                return;
+            }
+        }
+
         descriptors.resize(2);
 
         auto& first_image = frames[0];
 
         {
             const auto& first_seq_frame = sequence->frames.at(0);
-            const fs::path image_filename = images_folder / std::format("{}.bin", first_seq_frame.image_name);
 
-            if (!fs::exists(image_filename)) {
-                ESP_LOGE(SEQ_TAG, "Image at '%s' not found!", image_filename.c_str());
+            if (!first_seq_frame.image_exists(char_fsm.character_data)) {
+                ESP_LOGE(SEQ_TAG, "Image '%s' not found!", first_seq_frame.image_name.c_str());
                 char_fsm.done_cooking_sl(false);
                 return;
             }
 
-            const auto file_size = fs::file_size(image_filename);
-
-            if (heap_caps_get_largest_free_block(MALLOC_CAP_SPIRAM) < file_size) {
-                throw bp::data::data_exception{bp::data::Error::OutOfRAM};
-            }
-
-            first_image.resize(file_size);
-
-            const auto image_file = std::make_unique<std::ifstream>(image_filename);
-            image_file->read(
-                reinterpret_cast<std::istream::char_type*>(first_image.data()),
-                static_cast<std::streamsize>(file_size)
-            );
-            image_file->close();
+            first_seq_frame.load_image(char_fsm.character_data, first_image->span());
         }
 
         const auto& seq_frame = sequence->frames.at(0);
-        descriptors[0] = bp::data::make_image_dsc(
+        descriptors[0] = data::make_image_dsc(
             seq_frame.has_alpha, seq_frame.width, seq_frame.height, first_image
         );
 
@@ -486,7 +385,7 @@ void sequence_cooker(const bp::data::StateSequence* sequence) {
 bool CharacterFSM::cook_if_needed(const std::string& state_name) const {
     const auto& [image, _] = character_data.states.at(state_name);
 
-    if (const auto* image_state = std::get_if<bp::data::StateImage>(&image)) {
+    if (const auto* image_state = std::get_if<data::StateImage>(&image)) {
         if (image_state->preload) return false;
 
         // Cook for image
@@ -494,7 +393,7 @@ bool CharacterFSM::cook_if_needed(const std::string& state_name) const {
             reinterpret_cast<TaskFunction_t>(single_image_cooker),
             IMG_TAG,
             COOKER_STACK,
-            const_cast<bp::data::StateImage*>(image_state),
+            const_cast<data::StateImage*>(image_state),
             configMAX_PRIORITIES / 2,
             &cooker_task_handle
         ); result != pdPASS) {
@@ -504,17 +403,17 @@ bool CharacterFSM::cook_if_needed(const std::string& state_name) const {
         return true;
     }
 
-    if (const auto* anim_state = std::get_if<bp::data::StateAnimation>(&image)) {
+    if (const auto* anim_state = std::get_if<data::StateAnimation>(&image)) {
         if (anim_state->preload) return false;
         if (const auto& anim_desc = character_data.animations.at(anim_state->name);
-            anim_desc.mode != bp::data::AnimationMode::FromRAM) return false;
+            anim_desc.mode != data::AnimationMode::FromRAM) return false;
 
         // Cook for anim frames
         if (const portBASE_TYPE result = xTaskCreate(
             reinterpret_cast<TaskFunction_t>(animation_cooker),
             ANIM_TAG,
             COOKER_STACK,
-            const_cast<bp::data::StateAnimation*>(anim_state),
+            const_cast<data::StateAnimation*>(anim_state),
             configMAX_PRIORITIES / 2,
             &cooker_task_handle
         ); result != pdPASS) {
@@ -524,15 +423,15 @@ bool CharacterFSM::cook_if_needed(const std::string& state_name) const {
         return true;
     }
 
-    if (const auto* sequence_state = std::get_if<bp::data::StateSequence>(&image)) {
-        if (sequence_state->mode == bp::data::SequenceLoadMode::Preload) return false;
+    if (const auto* sequence_state = std::get_if<data::StateSequence>(&image)) {
+        if (sequence_state->mode == data::SequenceLoadMode::Preload) return false;
 
         // Cook for sequence frames
         if (const portBASE_TYPE result = xTaskCreate(
             reinterpret_cast<TaskFunction_t>(sequence_cooker),
             SEQ_TAG,
             COOKER_STACK,
-            const_cast<bp::data::StateSequence*>(sequence_state),
+            const_cast<data::StateSequence*>(sequence_state),
             configMAX_PRIORITIES / 2,
             &cooker_task_handle
         ); result != pdPASS) {
@@ -545,16 +444,36 @@ bool CharacterFSM::cook_if_needed(const std::string& state_name) const {
     return false;
 }
 
-void CharacterFSM::set_progress_visible(const bool visibility) const {
-    LVGLLockGuard guard(0);
-    lv_obj_set_flag(progress_box_obj, LV_OBJ_FLAG_HIDDEN, !visibility);
+void CharacterFSM::set_progress_visible(const bool visibility) {
+    CriticalGuard guard(&spinlock);
+    cooking_progress_dirty = true;
+    new_cooking_visible = visibility;
 }
 
-void CharacterFSM::set_cooking_progress(const int32_t current, const int32_t max) const {
-    LVGLLockGuard guard(0);
+void CharacterFSM::set_cooking_progress(const int32_t current, const int32_t max) {
+    CriticalGuard guard(&spinlock);
+    cooking_progress_dirty = true;
+    new_cooking_current = current;
+    new_cooking_max = max;
+}
 
-    const auto progress = static_cast<float>(bp::DISPLAY_WIDTH) / static_cast<float>(max) * static_cast<float>(current);
-    lv_obj_set_size(progress_bar_obj, static_cast<int32_t>(progress), PROGRESS_BAR_HEIGHT);
+void CharacterFSM::update_cooking_progress_if_needed() {
+    bool dirty;
+
+    {
+        CriticalGuard guard(&spinlock);
+        dirty = cooking_progress_dirty;
+    }
+
+    if (dirty) {
+        LVGLLockGuard guard(0);
+
+        lv_obj_set_flag(progress_box_obj, LV_OBJ_FLAG_HIDDEN, !new_cooking_visible);
+        const auto progress = static_cast<float>(DISPLAY_WIDTH)
+                              / static_cast<float>(new_cooking_max)
+                              * static_cast<float>(new_cooking_current);
+        lv_obj_set_size(progress_bar_obj, static_cast<int32_t>(progress), PROGRESS_BAR_HEIGHT);
+    }
 }
 
 void CharacterFSM::switch_state_internal(const std::string& state_name) {
@@ -567,7 +486,12 @@ void CharacterFSM::switch_state_internal(const std::string& state_name) {
 
 void CharacterFSM::switch_state_sl(const std::string& next_state) {
     if (!is_free_sl()) {
-        ESP_LOGI(TAG, "Can't switch to '%s' state, busy!", next_state.c_str());
+        ESP_LOGI(TAG, "Can't switch to '%s' state right now, queuing if possible", next_state.c_str());
+
+        CriticalGuard guard(&spinlock);
+        if (being_cooked_state != next_state) {
+            queued_state = next_state;
+        }
         return;
     }
 
@@ -594,11 +518,27 @@ void CharacterFSM::switch_state_sl(const std::string& next_state) {
     }
 }
 
+void CharacterFSM::address_queue() {
+    std::optional<std::string> to_queue;
+
+    {
+        CriticalGuard guard(&spinlock);
+        if (queued_state && !(busy || state_is_cooking)) {
+            to_queue = queued_state;
+            queued_state = std::nullopt;
+        }
+    }
+
+    if (to_queue) switch_state_sl(to_queue.value());
+}
+
 void CharacterFSM::switch_to_default_sl() {
     switch_state_sl(character_data.default_state);
 }
 
 void CharacterFSM::done_cooking_sl(const bool success) {
+    wait_until_not_busy_sl();
+
     if (success) {
         ESP_LOGI(TAG, "Cooker reported success!");
 
@@ -645,7 +585,7 @@ bool CharacterFSM::invoke_action_sl(const std::string& action_id) {
     try {
         const auto& [_, action] = char_fsm.character_data.actions.at(action_id);
 
-        if (const auto* switch_state = std::get_if<bp::data::ActionSwitchState>(&action)) {
+        if (const auto* switch_state = std::get_if<data::ActionSwitchState>(&action)) {
             switch_state_sl(switch_state->state_name);
         }
 
@@ -701,6 +641,12 @@ void CharacterFSM::wait_until_free_sl() {
     }
 }
 
+void CharacterFSM::wait_until_not_busy_sl() {
+    while (is_busy_sl()) {
+        vTaskDelay(50 / portTICK_PERIOD_MS);
+    }
+}
+
 static void integer_upscale(const uint16_t* src, uint32_t* dst, const uint32_t columns, const uint32_t rows) {
     for (uint32_t row = 0; row < rows; row++) {
         const uint32_t src_start = row * columns;
@@ -745,12 +691,12 @@ void upload_to_screen(
 }
 
 void CharacterFSM::play_animation(
-    const bp::data::StateAnimation& state_desc,
-    const bp::data::Animation& animation_desc
+    const data::StateAnimation& state_desc,
+    const data::Animation& animation_desc
 ) const {
     uint32_t width = animation_desc.width, height = animation_desc.height;
 
-    bp::data::ImageDataVec upscaled_fb{};
+    data::ImageDataVec upscaled_fb{};
 
     if (animation_desc.upscale) {
         width *= 2;
@@ -762,8 +708,8 @@ void CharacterFSM::play_animation(
     LVGLLockGuard guard(0);
 
     if (animation_desc.clear_screen) {
-        constexpr std::size_t PIXEL_COUNT = bp::DISPLAY_WIDTH * ROWS_AT_A_TIME;
-        bp::data::ImageDataVec clear_fb{};
+        constexpr std::size_t PIXEL_COUNT = DISPLAY_WIDTH * ROWS_AT_A_TIME;
+        data::ImageDataVec clear_fb{};
         clear_fb.resize(PIXEL_COUNT * BYTES_PER_PIXEL);
 
         auto* pixel_view = reinterpret_cast<uint16_t*>(clear_fb.data());
@@ -775,12 +721,12 @@ void CharacterFSM::play_animation(
         }
 
         uint16_t y = 0;
-        while (y < bp::DISPLAY_HEIGHT) {
+        while (y < DISPLAY_HEIGHT) {
             upload_to_screen(
                 0,
                 y,
-                bp::DISPLAY_WIDTH,
-                std::min(ROWS_AT_A_TIME, static_cast<uint32_t>(bp::DISPLAY_HEIGHT - y)),
+                DISPLAY_WIDTH,
+                std::min(ROWS_AT_A_TIME, static_cast<uint32_t>(DISPLAY_HEIGHT - y)),
                 reinterpret_cast<const uint16_t*>(clear_fb.data())
             );
             y += ROWS_AT_A_TIME;
@@ -794,15 +740,15 @@ void CharacterFSM::play_animation(
             for (const auto& frame: preloaded_data.animation_frames.at(state_desc.name)) {
                 timer.frame_start();
 
-                auto* frame_buf = &frame;
+                uint8_t* frame_ptr = frame->data();
                 if (animation_desc.upscale) {
                     integer_upscale(
-                        reinterpret_cast<const uint16_t*>(frame.data()),
+                        reinterpret_cast<const uint16_t*>(frame->data()),
                         reinterpret_cast<uint32_t*>(upscaled_fb.data()),
                         animation_desc.width,
                         animation_desc.height
                     );
-                    frame_buf = &upscaled_fb;
+                    frame_ptr = upscaled_fb.data();
                 }
 
                 upload_to_screen(
@@ -810,35 +756,25 @@ void CharacterFSM::play_animation(
                     animation_desc.y,
                     width,
                     height,
-                    reinterpret_cast<const uint16_t*>(frame_buf->data())
+                    reinterpret_cast<const uint16_t*>(frame_ptr)
                 );
 
                 timer.frame_end();
             }
         }
     } else {
-        const fs::path frames_folder{std::format("{}/{}/animations/{}/frames", bp::data::CHARACTERS_PATH, character_data.id, state_desc.name)};
-
         switch (animation_desc.mode) {
-            case bp::data::AnimationMode::FromSDCard: {
+            case data::AnimationMode::FromSDCard: {
                 const std::size_t IMAGE_FB_SIZE = animation_desc.width * animation_desc.height * BYTES_PER_PIXEL;
 
-                bp::data::ImageDataVec image_fb{};
+                data::ImageDataVec image_fb{};
                 image_fb.resize(IMAGE_FB_SIZE);
 
                 for (uint32_t frame_index = 0; frame_index < animation_desc.frame_count; frame_index++) {
                     timer.frame_start();
 
                     // Load frame into memory
-                    {
-                        const auto frame_path = frames_folder / std::format("{}.bin", frame_index + 1);
-                        const auto file = std::make_unique<std::ifstream>(frame_path);
-                        file->read(
-                            reinterpret_cast<std::istream::char_type*>(image_fb.data()),
-                            static_cast<std::streamsize>(IMAGE_FB_SIZE)
-                        );
-                        file->close();
-                    }
+                    state_desc.load_frame(image_fb, frame_index + 1);
 
                     const auto* frame_buf = &image_fb;
                     if (animation_desc.upscale) {
@@ -865,19 +801,19 @@ void CharacterFSM::play_animation(
                 break;
             }
 
-            case bp::data::AnimationMode::FromRAM: {
+            case data::AnimationMode::FromRAM: {
                 for (uint32_t frame_index = 0; frame_index < animation_desc.frame_count; frame_index++) {
                     timer.frame_start();
 
-                    const auto* frame_buf = &loaded_images[frame_index];
+                    const uint8_t* frame_ptr = loaded_images[frame_index]->data();
                     if (animation_desc.upscale) {
                         integer_upscale(
-                            reinterpret_cast<const uint16_t*>(loaded_images[frame_index].data()),
+                            reinterpret_cast<const uint16_t*>(loaded_images[frame_index]->data()),
                             reinterpret_cast<uint32_t*>(upscaled_fb.data()),
                             animation_desc.width,
                             animation_desc.height
                         );
-                        frame_buf = &upscaled_fb;
+                        frame_ptr = upscaled_fb.data();
                     }
 
                     upload_to_screen(
@@ -885,7 +821,7 @@ void CharacterFSM::play_animation(
                         animation_desc.y,
                         width,
                         height,
-                        reinterpret_cast<const uint16_t*>(frame_buf->data())
+                        reinterpret_cast<const uint16_t*>(frame_ptr)
                     );
 
                     timer.frame_end();
@@ -898,31 +834,37 @@ void CharacterFSM::play_animation(
     }
 }
 
-void CharacterFSM::set_ui_image(const bp::data::StateImageVariant& variant) {
+void CharacterFSM::update_display(
+    const image::SharedAllocatedImageData& image, const lv_image_dsc_t& desc, const bool upscale
+) {
+    LVGLLockGuard guard(0);
+    current_image = image;
+    current_descriptor = desc;
+
+    lv_image_set_scale(image_obj, upscale ? 512 : 256);
+    lv_image_set_src(image_obj, &current_descriptor);
+    lv_obj_invalidate(lv_screen_active());
+}
+
+void CharacterFSM::set_ui_image(const data::StateImageVariant& variant) {
     ui_dirty = false;
     auto busy_guard = get_busy_sl();
 
-    if (const auto* image_desc = std::get_if<bp::data::StateImage>(&variant)) {
-        LVGLLockGuard guard(0);
-
-        lv_image_set_scale(image_obj, image_desc->upscale ? 512 : 256);
-
+    if (const auto* image_desc = std::get_if<data::StateImage>(&variant)) {
         if (image_desc->preload) {
-            const auto& [dsc, _] = preloaded_data.image_data.at(image_desc->image_name);
-            lv_image_set_src(image_obj, &dsc);
+            const auto& [dsc, ptr] = preloaded_data.image_data.at(image_desc->image_name);
+            update_display(ptr, dsc, image_desc->upscale);
         } else {
-            lv_image_set_src(image_obj, &loaded_descriptors[0]);
+            update_display(loaded_images[0], loaded_descriptors[0], image_desc->upscale);
         }
-
-        lv_obj_invalidate(lv_screen_active());
-    } else if (const auto* anim_desc = std::get_if<bp::data::StateAnimation>(&variant)) {
+    } else if (const auto* anim_desc = std::get_if<data::StateAnimation>(&variant)) {
         const auto& animation = character_data.animations.at(anim_desc->name);
 
         play_animation(*anim_desc, animation);
         busy_guard.free();
 
         switch_state_sl(anim_desc->next_state);
-    } else if (const auto* sequence_desc = std::get_if<bp::data::StateSequence>(&variant)) {
+    } else if (const auto* sequence_desc = std::get_if<data::StateSequence>(&variant)) {
         // Check if new frame is required
         if (esp_timer_get_time() > next_frame_time) {
             // Sequence is empty!
@@ -931,87 +873,65 @@ void CharacterFSM::set_ui_image(const bp::data::StateImageVariant& variant) {
                 return;
             }
 
-            current_sequence_index++;
-            if (current_sequence_index >= sequence_desc->frames.size()) current_sequence_index = 0;
+            current_sequence_index = (current_sequence_index + 1) % sequence_desc->frames.size();
 
             const auto& frame = sequence_desc->frames.at(current_sequence_index);
-
-            {
-                LVGLLockGuard guard(0);
-                lv_image_set_scale(image_obj, frame.upscale ? 512 : 256);
-            }
 
             next_frame_time = esp_timer_get_time() + frame.duration_us;
 
             switch (sequence_desc->mode) {
-                case bp::data::SequenceLoadMode::Preload: {
-                    LVGLLockGuard guard(0);
-                    const auto& [dsc, _] = preloaded_data.image_data.at(frame.image_name);
-                    lv_image_set_src(image_obj, &dsc);
+                case data::SequenceLoadMode::Preload: {
+                    const auto& [dsc, ptr] = preloaded_data.image_data.at(frame.image_name);
+
+                    update_display(ptr, dsc, frame.upscale);
+
                     break;
                 }
 
-                case bp::data::SequenceLoadMode::LoadAll: {
-                    LVGLLockGuard guard(0);
-                    lv_image_set_src(image_obj, &loaded_descriptors[current_sequence_index]);
+                case data::SequenceLoadMode::LoadAll: {
+                    update_display(
+                        loaded_images[current_sequence_index],
+                        loaded_descriptors[current_sequence_index],
+                        frame.upscale
+                    );
+
                     break;
                 }
 
-                case bp::data::SequenceLoadMode::LoadEach: {
+                case data::SequenceLoadMode::LoadEach: {
                     const auto ready_frame_index = current_sequence_index % 2;
                     const auto offscreen_frame_index = (ready_frame_index + 1) % 2;
 
-                    {
-                        LVGLLockGuard guard(0);
-                        lv_image_set_src(image_obj, &loaded_descriptors[ready_frame_index]);
-                    }
+                    update_display(
+                        loaded_images[ready_frame_index],
+                        loaded_descriptors[ready_frame_index],
+                        frame.upscale
+                    );
+
+                    ESP_LOGI(IMG_TAG, "Setting #%l to screen", current_sequence_index);
 
                     const auto next_sequence_index = (current_sequence_index + 1) % sequence_desc->frames.size();
 
-                    auto& offscreen_image = loaded_images[offscreen_frame_index];
+                    const auto& offscreen_image = loaded_images[offscreen_frame_index];
                     const auto& seq_frame = sequence_desc->frames.at(next_sequence_index);
 
                     {
-                        const fs::path images_folder{
-                            std::format(
-                                "{}/{}/images",
-                                bp::data::CHARACTERS_PATH,
-                                char_fsm.character_data.id
-                            )
-                        };
-
-                        const fs::path image_filename = images_folder / std::format("{}.bin", seq_frame.image_name);
-
-                        if (!fs::exists(image_filename)) {
+                        if (!seq_frame.image_exists(character_data)) {
                             return;
                         }
 
-                        const auto file_size = fs::file_size(image_filename);
+                        ESP_LOGI(TAG, "Writing frame into %x-%x for #%d", offscreen_image->start(), offscreen_image->end(), next_sequence_index);
 
-                        if (heap_caps_get_largest_free_block(MALLOC_CAP_SPIRAM) < file_size) {
-                            throw bp::data::data_exception{bp::data::Error::OutOfRAM};
-                        }
-
-                        offscreen_image.resize(file_size);
-
-                        const auto image_file = std::make_unique<std::ifstream>(image_filename);
-                        image_file->read(
-                            reinterpret_cast<std::istream::char_type*>(offscreen_image.data()),
-                            static_cast<std::streamsize>(file_size)
-                        );
-                        image_file->close();
+                        seq_frame.load_image(character_data, offscreen_image->span());
                     }
 
-                    loaded_descriptors[offscreen_frame_index] = bp::data::make_image_dsc(
+                    loaded_descriptors[offscreen_frame_index] = data::make_image_dsc(
                         seq_frame.has_alpha, seq_frame.width, seq_frame.height, offscreen_image
                     );
 
                     break;
                 }
             }
-
-            LVGLLockGuard guard(0);
-            lv_obj_invalidate(lv_screen_active());
         }
     }
 }
@@ -1029,8 +949,11 @@ void CharacterFSM::tick() {
             set_ui_image(image);
         }
 
+        update_cooking_progress_if_needed();
+        address_queue();
+
         for (const auto& [next_state, trigger]: transitions) {
-            if (const auto elapsed = std::get_if<bp::data::StateTransitionElapsedTime>(&trigger)) {
+            if (const auto elapsed = std::get_if<data::StateTransitionElapsedTime>(&trigger)) {
                 if (time_since_transition > elapsed->duration_us && !state_is_cooking) {
                     switch_state_sl(next_state);
                 }
@@ -1045,16 +968,16 @@ void fsm_task(void*) {
     TaskDeleteGuard task_guard{};
     ESP_LOGI(TAG, "FSM Task running!");
 
-    const auto characters = bp::data::list_characters();
+    const auto characters = data::list_characters();
 
     if (characters.empty()) {
         ESP_LOGE(TAG, "There's no characters!");
     }
 
-    auto selected_character_name = bp::data::get_selected_character_name(characters);
+    auto selected_character_name = data::get_selected_character_name(characters);
     if (!selected_character_name) {
         selected_character_name = characters.front();
-        bp::data::select_character(characters, *selected_character_name);
+        data::select_character(characters, *selected_character_name);
     }
 
     ESP_LOGI(TAG, "Loading '%s' character data...", selected_character_name->c_str());

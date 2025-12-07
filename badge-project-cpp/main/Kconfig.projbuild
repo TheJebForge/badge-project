@@ -1,0 +1,5 @@
+menu "BP Project"
+    config IMAGE_STATIC_STORAGE_SIZE
+        int "Image Static Storage Size in KB"
+        default 4000
+endmenu
