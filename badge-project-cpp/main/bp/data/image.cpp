@@ -81,28 +81,62 @@ namespace bp::image {
         return largest_size;
     }
 
+    struct OccupiedSpace {
+        std::size_t start;
+        std::size_t end;
 
-    std::optional<std::size_t> ImageDataAllocator::check_occlusions(
-        const std::size_t start,
-        const std::size_t len
-    ) const {
+        OccupiedSpace() = default;
+
+        explicit OccupiedSpace(const AllocatedImageData& allocation)
+            : start(allocation.start()),
+              end(allocation.end()) {
+        }
+
+        friend bool operator<(const OccupiedSpace& lhs, const OccupiedSpace& rhs) {
+            if (lhs.end < rhs.start) {
+                return true;
+            }
+
+            if (rhs.end < lhs.start) {
+                return false;
+            }
+
+            return true;
+        }
+
+        friend bool operator<=(const OccupiedSpace& lhs, const OccupiedSpace& rhs) {
+            return rhs >= lhs;
+        }
+
+        friend bool operator>(const OccupiedSpace& lhs, const OccupiedSpace& rhs) {
+            return rhs < lhs;
+        }
+
+        friend bool operator>=(const OccupiedSpace& lhs, const OccupiedSpace& rhs) {
+            return !(lhs < rhs);
+        }
+    };
+
+    std::optional<std::size_t> ImageDataAllocator::find_space(const std::size_t size) const {
+        std::vector<OccupiedSpace> occupied{};
+        occupied.reserve(_allocations.size());
+
         for (const auto& potential_alloc : _allocations) {
-            if (const auto alloc = potential_alloc.lock(); alloc && alloc->_valid) {
-                if (start >= alloc->_start && start + len - 1 <= alloc->_end) {
-                    return alloc->_end;
-                }
+            if (const auto allocation = potential_alloc.lock()) {
+                occupied.emplace_back(*allocation.get());
             }
         }
 
-        return std::nullopt;
-    }
+        std::sort(occupied.begin(), occupied.end());
 
-
-    std::optional<std::size_t> ImageDataAllocator::find_space(const std::size_t size) const {
         std::size_t block_start = 0;
 
-        while (auto occlusion_end = check_occlusions(block_start, size)) {
-            block_start = occlusion_end.value() + 1;
+        for (const auto& occlusion : occupied) {
+            if (const auto current_size = occlusion.start - block_start; current_size > size) {
+                return block_start;
+            }
+
+            block_start = occlusion.end + 1;
         }
 
         if (const auto current_size = IMAGE_STORAGE_SIZE - block_start; current_size > size) {

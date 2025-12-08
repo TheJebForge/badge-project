@@ -489,7 +489,7 @@ void CharacterFSM::switch_state_sl(const std::string& next_state) {
         ESP_LOGI(TAG, "Can't switch to '%s' state right now, queuing if possible", next_state.c_str());
 
         CriticalGuard guard(&spinlock);
-        if (being_cooked_state != next_state) {
+        if (!state_is_cooking && being_cooked_state != next_state) {
             queued_state = next_state;
         }
         return;
@@ -770,63 +770,66 @@ void CharacterFSM::play_animation(
                 data::ImageDataVec image_fb{};
                 image_fb.resize(IMAGE_FB_SIZE);
 
-                for (uint32_t frame_index = 0; frame_index < animation_desc.frame_count; frame_index++) {
-                    timer.frame_start();
+                for (int repeat = 0; repeat < state_desc.loop_count; repeat++) {
+                    for (uint32_t frame_index = 0; frame_index < animation_desc.frame_count; frame_index++) {
+                        timer.frame_start();
 
-                    // Load frame into memory
-                    state_desc.load_frame(image_fb, frame_index + 1);
+                        // Load frame into memory
+                        state_desc.load_frame(image_fb, frame_index + 1);
 
-                    const auto* frame_buf = &image_fb;
-                    if (animation_desc.upscale) {
-                        integer_upscale(
-                            reinterpret_cast<const uint16_t*>(image_fb.data()),
-                            reinterpret_cast<uint32_t*>(upscaled_fb.data()),
-                            animation_desc.width,
-                            animation_desc.height
+                        const auto* frame_buf = &image_fb;
+                        if (animation_desc.upscale) {
+                            integer_upscale(
+                                reinterpret_cast<const uint16_t*>(image_fb.data()),
+                                reinterpret_cast<uint32_t*>(upscaled_fb.data()),
+                                animation_desc.width,
+                                animation_desc.height
+                            );
+                            frame_buf = &upscaled_fb;
+                        }
+
+                        upload_to_screen(
+                            animation_desc.x,
+                            animation_desc.y,
+                            width,
+                            height,
+                            reinterpret_cast<const uint16_t*>(frame_buf->data())
                         );
-                        frame_buf = &upscaled_fb;
+
+                        timer.frame_end();
                     }
-
-                    upload_to_screen(
-                        animation_desc.x,
-                        animation_desc.y,
-                        width,
-                        height,
-                        reinterpret_cast<const uint16_t*>(frame_buf->data())
-                    );
-
-                    timer.frame_end();
                 }
 
                 break;
             }
 
             case data::AnimationMode::FromRAM: {
-                for (uint32_t frame_index = 0; frame_index < animation_desc.frame_count; frame_index++) {
-                    timer.frame_start();
+                for (int repeat = 0; repeat < state_desc.loop_count; repeat++) {
+                    for (uint32_t frame_index = 0; frame_index < animation_desc.frame_count; frame_index++) {
+                        timer.frame_start();
 
-                    const uint8_t* frame_ptr = loaded_images[frame_index]->data();
-                    if (animation_desc.upscale) {
-                        integer_upscale(
-                            reinterpret_cast<const uint16_t*>(loaded_images[frame_index]->data()),
-                            reinterpret_cast<uint32_t*>(upscaled_fb.data()),
-                            animation_desc.width,
-                            animation_desc.height
+                        const uint8_t* frame_ptr = loaded_images[frame_index]->data();
+                        if (animation_desc.upscale) {
+                            integer_upscale(
+                                reinterpret_cast<const uint16_t*>(loaded_images[frame_index]->data()),
+                                reinterpret_cast<uint32_t*>(upscaled_fb.data()),
+                                animation_desc.width,
+                                animation_desc.height
+                            );
+                            frame_ptr = upscaled_fb.data();
+                        }
+
+                        upload_to_screen(
+                            animation_desc.x,
+                            animation_desc.y,
+                            width,
+                            height,
+                            reinterpret_cast<const uint16_t*>(frame_ptr)
                         );
-                        frame_ptr = upscaled_fb.data();
+
+                        timer.frame_end();
                     }
-
-                    upload_to_screen(
-                        animation_desc.x,
-                        animation_desc.y,
-                        width,
-                        height,
-                        reinterpret_cast<const uint16_t*>(frame_ptr)
-                    );
-
-                    timer.frame_end();
                 }
-
 
                 break;
             }
