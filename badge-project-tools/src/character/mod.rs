@@ -5,7 +5,7 @@ use tar::{Builder, Header};
 use crate::character::repr::{BinaryRepr, Character, StateImage};
 use crate::image::encode_image_data;
 
-mod repr;
+pub mod repr;
 pub mod util;
 
 #[derive(clap::Parser, Debug)]

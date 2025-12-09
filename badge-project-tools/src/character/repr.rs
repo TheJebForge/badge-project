@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use crate::character::util::{any_as_u8_vec, string_to_char_array};
 use crate::{bp_character_action_e_BP_CHARACTER_ACTION_SWITCH_STATE, bp_character_action_file_s, bp_character_action_u, bp_character_animation_file_s, bp_character_animation_mode_e_BP_CHARACTER_ANIMATION_MODE_FROM_RAM, bp_character_animation_mode_e_BP_CHARACTER_ANIMATION_MODE_FROM_SDCARD, bp_character_file_s, bp_character_image_descriptor_s, bp_character_sequence_mode_e_BP_CHARACTER_SEQUENCE_MODE_LOAD_ALL, bp_character_sequence_mode_e_BP_CHARACTER_SEQUENCE_MODE_LOAD_EACH, bp_character_sequence_mode_e_BP_CHARACTER_SEQUENCE_MODE_PRELOAD, bp_character_state_animation_descriptor_s, bp_character_state_file_s, bp_character_state_image_e_BP_CHARACTER_STATE_ANIMATION, bp_character_state_image_e_BP_CHARACTER_STATE_NO_IMAGE, bp_character_state_image_e_BP_CHARACTER_STATE_SEQUENCE, bp_character_state_image_e_BP_CHARACTER_STATE_SINGLE_IMAGE, bp_character_state_image_u, bp_character_state_sequence_descriptor_s, bp_data_FORMAT_VERSION, bp_sequence_frame_file_s, bp_state_transition_file_s, bp_state_trigger_e_BP_STATE_TRIGGER_CLICKED, bp_state_trigger_e_BP_STATE_TRIGGER_ELAPSED_TIME, bp_state_trigger_s, bp_state_trigger_u};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::ffi::NulError;
 use std::path::PathBuf;
 use crate::image::rgb_to_565;
@@ -10,7 +10,7 @@ pub trait BinaryRepr {
     fn to_bin(&self) -> Result<Vec<u8>, NulError>;
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Serialize, Clone, Debug)]
 pub struct Character {
     pub id: String,
     pub name: String,
@@ -24,14 +24,39 @@ pub struct Character {
     pub actions: HashMap<String, Action>
 }
 
-#[derive(Deserialize)]
+impl Default for Character {
+    fn default() -> Self {
+        Self::from_id("unnamed")
+    }
+}
+
+impl Character {
+    pub fn from_id(name: &str) -> Self {
+        Self {
+            id: name.to_string(),
+            name: "Unnamed".to_string(),
+            species: "Unknown Species".to_string(),
+            default_state: "idle".to_string(),
+            states: HashMap::from([
+                ("idle".to_string(), State {
+                    image: StateImage::None,
+                    transitions: vec![],
+                })
+            ]),
+            animations: Default::default(),
+            actions: Default::default(),
+        }
+    }
+}
+
+#[derive(Deserialize, Serialize, Clone, Debug)]
 pub struct State {
     pub image: StateImage,
     #[serde(default)]
     pub transitions: Vec<StateTransition>
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Serialize, Clone, Debug)]
 pub enum StateImage {
     None,
     Single {
@@ -59,13 +84,13 @@ pub enum StateImage {
     }
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Serialize, Clone, Debug)]
 pub struct StateTransition {
     pub to_state: String,
     pub trigger: StateTransitionTrigger
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Serialize, Clone, Debug)]
 pub enum StateTransitionTrigger {
     ElapsedTime {
         duration: i64
@@ -73,7 +98,7 @@ pub enum StateTransitionTrigger {
     Clicked
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Serialize, Clone, Debug)]
 pub struct Animation {
     pub x: u16,
     pub y: u16,
@@ -97,20 +122,20 @@ fn default_animation_mode() -> AnimationMode {
     AnimationMode::FromRAM
 }
 
-#[derive(Deserialize, Copy, Clone)]
+#[derive(Deserialize, Serialize, Copy, Clone, Debug)]
 pub enum AnimationMode {
     FromSDCard,
     FromRAM
 }
 
-#[derive(Deserialize, Copy, Clone)]
+#[derive(Deserialize, Serialize, Copy, Clone, Debug)]
 pub enum SequenceMode {
     LoadAll,
     LoadEach,
     Preload
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Serialize, Clone, Debug)]
 pub struct SequenceFrame {
     pub name: String,
     pub path: PathBuf,
@@ -123,13 +148,13 @@ pub struct SequenceFrame {
     pub duration: i64
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Serialize, Clone, Debug)]
 pub struct Action {
     pub display: String,
     pub ty: ActionType
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Serialize, Clone, Debug)]
 pub enum ActionType {
     SwitchState(String)
 }
