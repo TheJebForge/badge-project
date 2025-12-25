@@ -4,15 +4,10 @@ import android.annotation.SuppressLint
 import android.app.Notification
 import android.app.NotificationManager
 import android.app.PendingIntent
-import com.thejebforge.badgeproject.R
 import android.app.Service
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
-import android.bluetooth.BluetoothGatt
-import android.bluetooth.BluetoothGattCallback
-import android.bluetooth.BluetoothGattCharacteristic
 import android.bluetooth.BluetoothManager
-import android.bluetooth.BluetoothProfile
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
@@ -26,20 +21,19 @@ import android.util.Log
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.mutableStateOf
 import androidx.core.app.NotificationCompat
-import androidx.core.app.TaskStackBuilder
 import com.thejebforge.badgeproject.MainApplication
+import com.thejebforge.badgeproject.R
 import com.thejebforge.badgeproject.data.intermediate.Device
+import com.thejebforge.badgeproject.gatt.GATTHelper
+import com.thejebforge.badgeproject.gatt.command.discoverServices
+import com.thejebforge.badgeproject.gatt.command.enableCommands
+import com.thejebforge.badgeproject.gatt.getActionList
 import com.thejebforge.badgeproject.ui.MainActivity
-import com.thejebforge.badgeproject.util.GATTHelper
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonClassDiscriminator
-import java.lang.IllegalArgumentException
-import java.nio.charset.Charset
-import java.util.UUID
-import kotlin.uuid.Uuid
 
 @SuppressLint("MissingPermission")
 class BoardService : Service() {
@@ -174,6 +168,7 @@ class BoardService : Service() {
     private fun actuallyConnect(device: BluetoothDevice) {
         GATTHelper.connect(
             this,
+            handler,
             device
         ) { (gatt, connected) ->
             if (connected) {
@@ -183,14 +178,24 @@ class BoardService : Service() {
 
                 gatt.discoverServices {
                     Log.i(TAG, "Discovered device services...")
-                }.withService("c4aa52a4-467e-413f-9559-419eb1a367a7") {
-                    readCharacteristic("00000011-467e-413f-9559-419eb1a367a7") {
-                        (chr, value) ->
-                        if (chr != null && value != null) {
-                            Log.i(TAG, "Received value for ${chr.uuid}: ${String(value)}")
-                        }
+                }.enableCommands {
+                    Log.i(TAG, "Commands enabled...")
+                }.getActionList {
+                    list ->
+                    if (list == null) {
+                        Log.i(TAG, "Failed to get action list")
+                        return@getActionList
+                    }
+
+                    for (element in list) {
+                        element.fold({
+                            (id, name) ->
+                            Log.i(TAG, "got action $id - $name")
+                        }, {})
                     }
                 }
+
+                Log.i(TAG, "All commands were sent")
             } else {
                 Log.i(TAG, "Device disconnected!")
                 deviceConnected.value = false
@@ -218,7 +223,8 @@ class BoardService : Service() {
                 Log.i(TAG, "Connecting to ${device.mac}")
 
                 if (device == currentDevice.value) {
-                    Log.i(TAG, "Already connected, skipping connection process");
+                    Log.i(TAG, "Already connected, skipping connection process")
+                    binder.connectedAction?.invoke()
                     return true
                 }
 
@@ -248,7 +254,7 @@ class BoardService : Service() {
                     } else {
                         actuallyConnect(device)
                     }
-                } catch (e: IllegalArgumentException) {
+                } catch (_: IllegalArgumentException) {
                     Log.w(TAG, "Device doesn't exist!")
                     return false
                 }
@@ -271,6 +277,10 @@ class BoardService : Service() {
 
     private fun stop() {
         binder.stopAction?.invoke()
+        gatt?.run {
+            disconnect()
+            gatt = null
+        }
         stopSelf()
     }
 
