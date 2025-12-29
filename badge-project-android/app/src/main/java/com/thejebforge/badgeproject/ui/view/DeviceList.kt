@@ -7,9 +7,7 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import androidx.compose.material.icons.rounded.Refresh
@@ -25,7 +23,6 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.thejebforge.badgeproject.R
@@ -94,7 +91,7 @@ class DeviceListViewModel @Inject constructor(
 
     var scanDevicesAction: (((BluetoothHelper.DeviceScanResponse) -> Unit) -> Unit)? = null
     var accessActivityAction: (((Context) -> Unit) -> Unit)? = null
-    var connectDeviceAction: ((Device, () -> Unit) -> Unit)? = null
+    var connectDeviceAction: ((Device, (Boolean) -> Unit) -> Unit)? = null
 
     init {
         viewModelScope.launch {
@@ -192,7 +189,8 @@ class DeviceListViewModel @Inject constructor(
 @Composable
 fun DeviceListScreen(
     viewModel: DeviceListViewModel,
-    servicedDevice: Device?
+    servicedDevice: Device?,
+    connected: Boolean
 ) {
     DeviceListScreenContent(
         viewModel.scanning.value,
@@ -203,7 +201,8 @@ fun DeviceListScreen(
         {
             viewModel.connectDevice(it)
         },
-        servicedDevice
+        servicedDevice,
+        connected
     )
 }
 
@@ -213,7 +212,8 @@ fun DeviceListScreenContent(
     scanAction: () -> Unit,
     devices: List<UIDevice>,
     connectDeviceAction: (UIDevice) -> Unit,
-    servicedDevice: Device?
+    servicedDevice: Device?,
+    deviceConnected: Boolean
 ) {
     Surface {
         Column(
@@ -284,7 +284,7 @@ fun DeviceListScreenContent(
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     items(devices) { device ->
-                        val connectedToThis = servicedDevice?.mac == device.mac
+                        val connectingToThis = servicedDevice?.mac == device.mac
 
                         Surface(
                             modifier = Modifier
@@ -298,7 +298,7 @@ fun DeviceListScreenContent(
                                     }
                                 ),
                             shape = RoundedCornerShape(10.dp),
-                            color = if (device.found.value || connectedToThis) {
+                            color = if (device.found.value || connectingToThis) {
                                 MaterialTheme.colorScheme.primary
                             } else {
                                 MaterialTheme.colorScheme.secondary
@@ -321,10 +321,16 @@ fun DeviceListScreenContent(
                                     )
                                 }
 
-                                if (device.previous.value || connectedToThis) {
+                                if (device.previous.value || connectingToThis) {
                                     Text(
-                                        stringResource(if (connectedToThis) {
-                                            R.string.currently_connected
+                                        stringResource(if (connectingToThis) {
+                                            if (device.connecting.value) {
+                                                R.string.device_connecting
+                                            } else if (deviceConnected) {
+                                                R.string.currently_connected
+                                            } else {
+                                                R.string.previously_connected
+                                            }
                                         } else {
                                             R.string.previously_connected
                                         }),
@@ -395,7 +401,8 @@ private fun Preview() {
             {},
             devices = previewDevices(),
             {},
-            Device("test0", "test mac 0")
+            Device("test0", "test mac 0"),
+            true
         )
     }
 }
@@ -412,7 +419,8 @@ private fun DarkPreview() {
             {},
             devices = previewDevices(),
             {},
-            Device("test0", "test mac 0")
+            Device("test0", "test mac 0"),
+            true
         )
     }
 }

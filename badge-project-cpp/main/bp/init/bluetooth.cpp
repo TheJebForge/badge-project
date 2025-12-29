@@ -177,6 +177,7 @@ void bp::BPCharacteristics::set_character_info(
     const std::string& species,
     const std::size_t action_count
 ) const {
+    mode_chr->setValue(0);
     character_name_chr->setValue(name.c_str());
     character_species_chr->setValue(species.c_str());
     action_count_chr->setValue(action_count);

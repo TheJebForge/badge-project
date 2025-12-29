@@ -19,7 +19,10 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
 import com.thejebforge.badgeproject.R
 import com.thejebforge.badgeproject.data.intermediate.Device
+import com.thejebforge.badgeproject.data.intermediate.BoardMode
 import com.thejebforge.badgeproject.service.BoardService
+import com.thejebforge.badgeproject.data.intermediate.CharacterAction
+import com.thejebforge.badgeproject.data.intermediate.CharacterState
 import com.thejebforge.badgeproject.ui.theme.BadgeProjectTheme
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
@@ -30,26 +33,29 @@ class DeviceControlViewModel @Inject constructor() : ViewModel() {
         override val name: String
             get() = "device_control"
     }
+
+    var device: Device? = null
 }
 
 @Composable
 fun DeviceControlScreen(
-    device: Device,
     navigateBack: () -> Unit,
     viewModel: DeviceControlViewModel,
     service: BoardService?
 ) {
     DeviceControlScreenContent(
-        device,
-        deviceConnected = service?.currentDevice?.value != null,
-        loading = false,
+        viewModel.device,
+        deviceConnected = service?.state?.deviceConnected?.value ?: false,
         navigateBack,
-        UIDeviceMode.Character( // TODO: Replace with service stuff
-            "Test Character",
-            "Some species",
-            listOf("huh", "what"),
-            {}
-        )
+        service?.let {
+            service ->
+            UIDeviceMode.fromCharacterState(
+                service.state.character.value
+            ) {
+                id ->
+                service.invokeAction(id)
+            }
+        }
     )
 }
 
@@ -59,20 +65,36 @@ sealed class UIDeviceMode(
     data class Character(
         val name: String,
         val species: String,
-        val actions: List<String>,
+        val actions: List<CharacterAction>,
         val runAction: (String) -> Unit
     ) : UIDeviceMode(
         R.string.character_mode
     )
 
     data object None : UIDeviceMode(R.string.no_devices_found)
+
+    companion object {
+        fun fromCharacterState(state: CharacterState, runAction: (String) -> Unit): UIDeviceMode? = when (state) {
+            is CharacterState.Loaded if state.info.mode.value == BoardMode.CHARACTER ->
+                with(state.info) {
+                    Character(
+                        name.value ?: "Loading...",
+                        species.value ?: "Loading...",
+                        actions.toList(),
+                        runAction
+                    )
+                }
+            is CharacterState.Loaded -> None
+            CharacterState.Loading -> null
+            CharacterState.Failed -> None
+        }
+    }
 }
 
 @Composable
 fun DeviceControlScreenContent(
-    device: Device,
+    device: Device?,
     deviceConnected: Boolean,
-    loading: Boolean,
     navigateBack: () -> Unit,
     modeInfo: UIDeviceMode?
 ) {
@@ -127,11 +149,11 @@ fun DeviceControlScreenContent(
 
                         Column {
                             Text(
-                                device.name,
+                                device?.name ?: "Missing",
                                 style = MaterialTheme.typography.bodyLarge
                             )
                             Text(
-                                device.mac,
+                                device?.mac ?: "Missing",
                                 style = MaterialTheme.typography.bodySmall
                             )
                         }
@@ -139,13 +161,43 @@ fun DeviceControlScreenContent(
                 }
             }
 
-            if (!deviceConnected || modeInfo == null) {
+            if (!deviceConnected) {
                 Surface(
                     color = MaterialTheme.colorScheme.errorContainer,
                     shape = RoundedCornerShape(10.dp)
                 ) {
                     Text(
                         stringResource(R.string.device_disconnected),
+                        style = MaterialTheme.typography.headlineLarge,
+                        modifier = Modifier.fillMaxWidth().padding(10.dp, 40.dp),
+                        textAlign = TextAlign.Center
+                    )
+                }
+                return@Column
+            }
+
+            if (modeInfo == null) {
+                Surface(
+                    color = MaterialTheme.colorScheme.surfaceContainer,
+                    shape = RoundedCornerShape(10.dp)
+                ) {
+                    Text(
+                        stringResource(R.string.info_loading),
+                        style = MaterialTheme.typography.headlineLarge,
+                        modifier = Modifier.fillMaxWidth().padding(10.dp, 40.dp),
+                        textAlign = TextAlign.Center
+                    )
+                }
+                return@Column
+            }
+
+            if (modeInfo == UIDeviceMode.None) {
+                Surface(
+                    color = MaterialTheme.colorScheme.errorContainer,
+                    shape = RoundedCornerShape(10.dp)
+                ) {
+                    Text(
+                        stringResource(R.string.info_failed_to_load),
                         style = MaterialTheme.typography.headlineLarge,
                         modifier = Modifier.fillMaxWidth().padding(10.dp, 40.dp),
                         textAlign = TextAlign.Center
@@ -218,7 +270,7 @@ fun DeviceControlScreenContent(
                             Surface(
                                 Modifier.fillMaxWidth()
                                     .clickable {
-                                        modeInfo.runAction(action)
+                                        modeInfo.runAction(action.id)
                                     },
                                 color = MaterialTheme.colorScheme.primary,
                                 shape = RoundedCornerShape(10.dp)
@@ -232,7 +284,7 @@ fun DeviceControlScreenContent(
                                     )
 
                                     Text(
-                                        action,
+                                        action.name,
                                         style = MaterialTheme.typography.headlineMedium
                                     )
                                 }
@@ -256,14 +308,12 @@ private fun Preview() {
         DeviceControlScreenContent(
             Device("BP Board", "00:1A:2B:3C:4D:5E"),
             deviceConnected = true,
-            loading = false,
             navigateBack = {},
             modeInfo = UIDeviceMode.Character(
                 "Test Character",
                 "Some species",
                 listOf(
-                    "huh", "what", "yes", "wow", "more actions", "even more garbage", "yessss", "fill the whole screen!",
-                    "huh", "what", "yes", "wow", "more actions", "even more garbage", "yessss", "fill the whole screen!"
+                    CharacterAction("test", "What")
                 ),
                 {}
             )
@@ -280,14 +330,45 @@ private fun PreviewNotConnected() {
         DeviceControlScreenContent(
             Device("BP Board", "00:1A:2B:3C:4D:5E"),
             deviceConnected = false,
-            loading = false,
             navigateBack = {},
             modeInfo = UIDeviceMode.Character(
                 "Test Character",
                 "Some species",
-                listOf("huh", "what"),
+                listOf(
+                    CharacterAction("test", "What")
+                ),
                 {}
             )
+        )
+    }
+}
+
+@Preview(
+    showSystemUi = true
+)
+@Composable
+private fun PreviewNotLoaded() {
+    BadgeProjectTheme {
+        DeviceControlScreenContent(
+            Device("BP Board", "00:1A:2B:3C:4D:5E"),
+            deviceConnected = true,
+            navigateBack = {},
+            modeInfo = null
+        )
+    }
+}
+
+@Preview(
+    showSystemUi = true
+)
+@Composable
+private fun PreviewFailed() {
+    BadgeProjectTheme {
+        DeviceControlScreenContent(
+            Device("BP Board", "00:1A:2B:3C:4D:5E"),
+            deviceConnected = true,
+            navigateBack = {},
+            modeInfo = UIDeviceMode.None
         )
     }
 }

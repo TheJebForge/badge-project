@@ -1,6 +1,8 @@
 package com.thejebforge.badgeproject.gatt.command
 
+import android.Manifest
 import android.bluetooth.BluetoothGatt
+import androidx.annotation.RequiresPermission
 import com.thejebforge.badgeproject.gatt.GATTCommandHandler
 import com.thejebforge.badgeproject.gatt.GATTHelper
 
@@ -12,6 +14,7 @@ class DiscoverServices(
     gattServer,
     commandHandler
 ) {
+    @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
     override fun runCommand() {
         if (!gattServer.discoverServices()) {
             onDiscovered(false)

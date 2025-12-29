@@ -4,6 +4,7 @@ import android.bluetooth.BluetoothGatt
 import android.os.Handler
 import com.thejebforge.badgeproject.gatt.GATTCommandHandler
 import com.thejebforge.badgeproject.gatt.GATTHelper
+import com.thejebforge.badgeproject.gatt.toStringWithoutNulls
 import com.thejebforge.badgeproject.util.PayloadCreator
 
 class GetActionName(
@@ -16,7 +17,7 @@ class GetActionName(
     override fun payload(): ByteArray = PayloadCreator.getActionDisplayName(id)
 
     override fun received(data: ByteArray) {
-        onDone(String(data).trim(Char(0)).asSuccess())
+        onDone(data.toStringWithoutNulls().asSuccess())
     }
 
     override fun failed(reason: ActionResponse<Nothing>) {

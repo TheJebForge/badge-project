@@ -43,7 +43,7 @@ class MainActivity @Inject constructor() : ComponentActivity() {
     private var navController: NavController? = null
     private var permissionLauncher: ActivityResultLauncher<Array<String>>? = null
     private var service: MutableState<BoardService?> = mutableStateOf(null)
-    private var serviceConnectedCallback: (() -> Unit)? = null
+    private var serviceConnectedCallback: ((Boolean) -> Unit)? = null
 
     private val serviceConnection = object : ServiceConnection {
         override fun onServiceConnected(name: ComponentName, service: IBinder) {
@@ -53,8 +53,8 @@ class MainActivity @Inject constructor() : ComponentActivity() {
             binder.connectedAction = serviceConnectedCallback
             Log.i(MainActivity::class.simpleName, "Bound to the service!")
 
-            if (this@MainActivity.service.value?.deviceConnected?.value == true) {
-                serviceConnectedCallback?.invoke()
+            if (this@MainActivity.service.value?.state?.deviceConnected?.value == true) {
+                serviceConnectedCallback?.invoke(true)
             }
         }
 
@@ -143,7 +143,18 @@ class MainActivity @Inject constructor() : ComponentActivity() {
                         }
                         viewModel.connectDeviceAction = {
                             device, callback ->
-                            serviceConnectedCallback = callback
+                            serviceConnectedCallback = {
+                                success ->
+                                callback(success)
+
+                                if (success) {
+                                    mainExecutor.execute {
+                                        if (navController.currentDestination?.route != DeviceControlViewModel.name) {
+                                            navController.navigate(DeviceControlViewModel.name)
+                                        }
+                                    }
+                                }
+                            }
                             Intent(
                                 this@MainActivity,
                                 BoardService::class.java
@@ -155,7 +166,26 @@ class MainActivity @Inject constructor() : ComponentActivity() {
                             }
                         }
 
-                        DeviceListScreen(viewModel, service.value?.currentDevice?.value)
+                        DeviceListScreen(
+                            viewModel,
+                            service.value?.state?.currentDevice?.value,
+                            service.value?.state?.deviceConnected?.value ?: false
+                        )
+                    }
+                    composable(DeviceControlViewModel.name) {
+                        val viewModel = hiltViewModel<DeviceControlViewModel>()
+
+                        service.value?.state?.currentDevice?.value?.let {
+                            viewModel.device = it.copy()
+                        }
+
+                        DeviceControlScreen(
+                            {
+                                navController.popBackStack()
+                            },
+                            viewModel,
+                            service.value
+                        )
                     }
                 }
             }

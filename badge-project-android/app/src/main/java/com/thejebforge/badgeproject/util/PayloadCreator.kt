@@ -23,5 +23,11 @@ object PayloadCreator {
         buf.put(id.toByteArray())
         return buf.array()
     }
+
+    fun invokeAction(id: String): ByteArray {
+        val buf = getNewBuffer().putHeader(BoardConstants.INVOKE_ACTION_OP)
+        buf.put(id.toByteArray())
+        return buf.array()
+    }
 }
 

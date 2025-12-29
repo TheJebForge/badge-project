@@ -18,4 +18,7 @@
     <string name="character_name">Character Name</string>
     <string name="character_species">Character Species</string>
     <string name="run_action">Run Action</string>
+    <string name="info_loading">Loading...</string>
+    <string name="info_failed_to_load">Failed to load!</string>
+    <string name="device_connecting">Connecting...</string>
 </resources>

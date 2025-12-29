@@ -1,7 +1,9 @@
 package com.thejebforge.badgeproject.gatt.command
 
+import android.Manifest
 import android.bluetooth.BluetoothGatt
 import android.bluetooth.BluetoothGattCharacteristic
+import androidx.annotation.RequiresPermission
 import com.thejebforge.badgeproject.gatt.GATTCommandHandler
 import com.thejebforge.badgeproject.gatt.GATTHelper
 import com.thejebforge.badgeproject.gatt.getCharacteristic
@@ -14,6 +16,7 @@ class ReadCharacteristic(
     private val chrUUID: UUID,
     private val onRead: (Pair<BluetoothGattCharacteristic?, ByteArray?>) -> Unit
 ) : GATTCommand(gattServer, commandHandler) {
+    @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
     override fun runCommand() {
         val chr = gattServer.getCharacteristic(svcUUID, chrUUID)
 

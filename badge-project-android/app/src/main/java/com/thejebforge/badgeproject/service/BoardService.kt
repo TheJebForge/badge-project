@@ -18,22 +18,32 @@ import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
 import android.util.Log
-import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.mutableStateOf
 import androidx.core.app.NotificationCompat
 import com.thejebforge.badgeproject.MainApplication
 import com.thejebforge.badgeproject.R
+import com.thejebforge.badgeproject.data.intermediate.BoardMode
+import com.thejebforge.badgeproject.data.intermediate.BoardState
+import com.thejebforge.badgeproject.data.intermediate.CharacterAction
+import com.thejebforge.badgeproject.data.intermediate.CharacterInfo
+import com.thejebforge.badgeproject.data.intermediate.CharacterState
 import com.thejebforge.badgeproject.data.intermediate.Device
 import com.thejebforge.badgeproject.gatt.GATTHelper
 import com.thejebforge.badgeproject.gatt.command.discoverServices
 import com.thejebforge.badgeproject.gatt.command.enableCommands
+import com.thejebforge.badgeproject.gatt.command.invokeAction
 import com.thejebforge.badgeproject.gatt.getActionList
+import com.thejebforge.badgeproject.gatt.getCharacterName
+import com.thejebforge.badgeproject.gatt.getCharacterSpecies
+import com.thejebforge.badgeproject.gatt.getDeviceMode
 import com.thejebforge.badgeproject.ui.MainActivity
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonClassDiscriminator
+
+
 
 @SuppressLint("MissingPermission")
 class BoardService : Service() {
@@ -43,8 +53,7 @@ class BoardService : Service() {
         private val TAG: String = BoardService::class.simpleName!!
     }
 
-    val currentDevice: MutableState<Device?> = mutableStateOf(null)
-    val deviceConnected: MutableState<Boolean> = mutableStateOf(false)
+    val state = BoardState()
 
     private val handler = Handler(Looper.getMainLooper())
     private lateinit var notificationManager: NotificationManager
@@ -60,8 +69,8 @@ class BoardService : Service() {
         .setContentTitle(getString(R.string.app_name))
         .setContentText(getString(
             R.string.notification_desc,
-            currentDevice.value?.name,
-            currentDevice.value?.mac
+            state.currentDevice.value?.name,
+            state.currentDevice.value?.mac
         ))
         .setSilent(true)
         .setOngoing(true)
@@ -71,7 +80,7 @@ class BoardService : Service() {
                 this,
                 MainActivity::class.java
             ).apply {
-                action = currentDevice.value?.let {
+                action = state.currentDevice.value?.let {
                     MainActivity.StartAction.OpenDevice(it).serialize()
                 }
             }.let {
@@ -145,7 +154,7 @@ class BoardService : Service() {
             val bondState = intent?.extras
                 ?.getInt(BluetoothDevice.EXTRA_BOND_STATE)
 
-            if (device == null || device.address != currentDevice.value?.mac) return
+            if (device == null || device.address != state.currentDevice.value?.mac) return
 
             when (bondState) {
                 BluetoothDevice.BOND_BONDING -> {
@@ -166,6 +175,8 @@ class BoardService : Service() {
     }
 
     private fun actuallyConnect(device: BluetoothDevice) {
+        Log.i(TAG, "Connecting to ${device.address}")
+
         GATTHelper.connect(
             this,
             handler,
@@ -173,33 +184,65 @@ class BoardService : Service() {
         ) { (gatt, connected) ->
             if (connected) {
                 Log.i(TAG, "Device connected!")
-                deviceConnected.value = true
-                binder.connectedAction?.invoke()
+                state.deviceConnected.value = true
+                state.hadConnection.value = true
+                binder.connectedAction?.invoke(true)
 
                 gatt.discoverServices {
                     Log.i(TAG, "Discovered device services...")
                 }.enableCommands {
                     Log.i(TAG, "Commands enabled...")
-                }.getActionList {
-                    list ->
-                    if (list == null) {
-                        Log.i(TAG, "Failed to get action list")
-                        return@getActionList
+                }.getDeviceMode {
+                    maybeMode ->
+                    if (maybeMode == null) {
+                        state.character.value = CharacterState.Failed
+                        return@getDeviceMode
                     }
 
-                    for (element in list) {
-                        element.fold({
-                            (id, name) ->
-                            Log.i(TAG, "got action $id - $name")
-                        }, {})
+                    val mode = BoardMode.fromInt(maybeMode)
+                    if (mode == null) {
+                        state.character.value = CharacterState.Failed
+                        return@getDeviceMode
                     }
+
+                    val charInfo = CharacterInfo(
+                        mode = mutableStateOf(mode)
+                    )
+
+                    gatt.getCharacterName {
+                        charInfo.name.value = it
+                    }.getCharacterSpecies {
+                        charInfo.species.value = it
+                    }.getActionList {
+                        receivedList ->
+                        if (receivedList == null) return@getActionList
+
+                        charInfo.actions.let {
+                            actionList ->
+                            actionList.clear()
+
+                            for (action in receivedList) {
+                                val (id, name) = action.getOrNull() ?: continue
+                                actionList.add(CharacterAction(id, name))
+                            }
+                        }
+                    }
+
+                    state.character.value = CharacterState.Loaded(charInfo)
                 }
 
                 Log.i(TAG, "All commands were sent")
             } else {
                 Log.i(TAG, "Device disconnected!")
-                deviceConnected.value = false
-                currentDevice.value = null
+                state.deviceConnected.value = false
+                binder.connectedAction?.invoke(false)
+
+                if (!state.hadConnection.value) {
+                    stop()
+                } else {
+                    Log.i(TAG, "Attempting to reconnect...")
+                    actuallyConnect(device)
+                }
             }
         }.onSuccess {
             gatt = it
@@ -207,6 +250,10 @@ class BoardService : Service() {
             Log.e(TAG, "Failed to connect GATT! $it")
             stop()
         }
+    }
+
+    fun invokeAction(id: String) {
+        gatt?.invokeAction(id) {}
     }
 
     private fun start(intent: Intent?): Boolean {
@@ -220,11 +267,10 @@ class BoardService : Service() {
         when(action) {
             is StartAction.Connect -> {
                 val device = action.device
-                Log.i(TAG, "Connecting to ${device.mac}")
 
-                if (device == currentDevice.value) {
+                if (device == state.currentDevice.value) {
                     Log.i(TAG, "Already connected, skipping connection process")
-                    binder.connectedAction?.invoke()
+                    binder.connectedAction?.invoke(true)
                     return true
                 }
 
@@ -233,7 +279,7 @@ class BoardService : Service() {
                     gatt = null
                 }
 
-                currentDevice.value = device
+                state.currentDevice.value = device
 
                 try {
                     val device = bluetoothAdapter.getRemoteDevice(device.mac)
@@ -296,7 +342,7 @@ class BoardService : Service() {
     }
 
     inner class BoardServiceBinder : Binder() {
-        var connectedAction: (() -> Unit)? = null
+        var connectedAction: ((Boolean) -> Unit)? = null
         var stopAction: (() -> Unit)? = null
         fun getService(): BoardService = this@BoardService
     }

@@ -11,20 +11,56 @@ import com.thejebforge.badgeproject.util.callbackCollector
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 
-fun GATTHelper.getActionCount(callback: (Int?) -> Unit) = this.apply {
-    withService(BoardConstants.CHARACTER_SVC) {
-        readCharacteristic(BoardConstants.ACTION_COUNT_CHR) {
-            (chr, data) ->
+fun ByteArray.toInt(): Int {
+    val buffer = ByteBuffer.wrap(this)
+    buffer.order(ByteOrder.LITTLE_ENDIAN)
+    return buffer.getInt()
+}
+
+fun ByteArray.toStringWithoutNulls(): String = String(this).trim(Char(0))
+
+fun GATTHelper.readCharacteristicToString(svc: String, chr: String, callback: (String?) -> Unit) {
+    withService(svc) {
+        readCharacteristic(chr) {
+                (chr, data) ->
             if (chr == null || data == null) {
                 callback(null)
                 return@readCharacteristic
             }
 
-            val buffer = ByteBuffer.wrap(data)
-            buffer.order(ByteOrder.LITTLE_ENDIAN)
-            callback(buffer.getInt())
+            callback(data.toStringWithoutNulls())
         }
     }
+}
+
+fun GATTHelper.readCharacteristicToInt(svc: String, chr: String, callback: (Int?) -> Unit) {
+    withService(svc) {
+        readCharacteristic(chr) {
+                (chr, data) ->
+            if (chr == null || data == null) {
+                callback(null)
+                return@readCharacteristic
+            }
+
+            callback(data.toInt())
+        }
+    }
+}
+
+fun GATTHelper.getDeviceMode(callback: (Int?) -> Unit) = this.apply {
+    readCharacteristicToInt(BoardConstants.CHARACTER_SVC, BoardConstants.CURRENT_MODE_CHR, callback)
+}
+
+fun GATTHelper.getCharacterName(callback: (String?) -> Unit) = this.apply {
+    readCharacteristicToString(BoardConstants.CHARACTER_SVC, BoardConstants.CHARACTER_NAME_CHR, callback)
+}
+
+fun GATTHelper.getCharacterSpecies(callback: (String?) -> Unit) = this.apply {
+    readCharacteristicToString(BoardConstants.CHARACTER_SVC, BoardConstants.CHARACTER_SPECIES_CHR, callback)
+}
+
+fun GATTHelper.getActionCount(callback: (Int?) -> Unit) = this.apply {
+    readCharacteristicToInt(BoardConstants.CHARACTER_SVC, BoardConstants.ACTION_COUNT_CHR, callback)
 }
 
 fun GATTHelper.getActionList(callback: (List<ActionResponse<Pair<String, String>>>?) -> Unit) {

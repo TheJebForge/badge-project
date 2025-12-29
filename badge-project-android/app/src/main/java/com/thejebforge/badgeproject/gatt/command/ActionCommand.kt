@@ -1,8 +1,11 @@
 package com.thejebforge.badgeproject.gatt.command
 
+import android.Manifest
 import android.bluetooth.BluetoothGatt
 import android.bluetooth.BluetoothGattCharacteristic
+import android.bluetooth.BluetoothStatusCodes
 import android.os.Handler
+import androidx.annotation.RequiresPermission
 import com.thejebforge.badgeproject.gatt.GATTCommandHandler
 import com.thejebforge.badgeproject.gatt.command.ActionResponse.Success
 import com.thejebforge.badgeproject.gatt.getCharacteristic
@@ -25,6 +28,7 @@ abstract class ActionCommand(
 
     private var dataReceived = false
 
+    @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
     override fun runCommand() {
         val cmdChr = gattServer.getCharacteristic(BoardConstants.CHARACTER_SVC, BoardConstants.COMMAND_CHR)
         val respChr = gattServer.getCharacteristic(BoardConstants.CHARACTER_SVC, BoardConstants.RESPONSE_CHR)
@@ -46,7 +50,7 @@ abstract class ActionCommand(
                 cmdChr,
                 payload,
                 BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE
-            ) != BluetoothGatt.GATT_SUCCESS
+            ) != BluetoothStatusCodes.SUCCESS
         ) {
             failed(ActionResponse.FailedWrite)
             continueExecution()
@@ -89,19 +93,19 @@ sealed class ActionResponse<out T> {
         override fun reason(): String = ""
     }
 
-    object CharacteristicsNotFound : ActionResponse<Nothing>() {
+    data object CharacteristicsNotFound : ActionResponse<Nothing>() {
         override fun reason(): String = "Characteristics Not Found"
     }
 
-    object FailedWrite : ActionResponse<Nothing>() {
+    data object FailedWrite : ActionResponse<Nothing>() {
         override fun reason(): String = "Failed Write"
     }
 
-    object TimedOut : ActionResponse<Nothing>() {
+    data object TimedOut : ActionResponse<Nothing>() {
         override fun reason(): String = "Timed Out"
     }
 
-    object ReportedFailure : ActionResponse<Nothing>() {
+    data object ReportedFailure : ActionResponse<Nothing>() {
         override fun reason(): String = "Reported Failure"
     }
 

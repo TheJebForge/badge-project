@@ -106,7 +106,7 @@ class BluetoothHelper @Inject constructor(
             scanner.startScan(
                 listOf(
                     ScanFilter.Builder()
-                        .setServiceUuid(ParcelUuid.fromString("c4aa52a4-467e-413f-9559-419eb1a367a7"))
+                        .setServiceUuid(ParcelUuid.fromString(BoardConstants.CHARACTER_SVC))
                         .build()
                 ),
                 ScanSettings.Builder().build(),
