@@ -5,6 +5,8 @@ import com.thejebforge.badgeproject.gatt.command.asSuccess
 import com.thejebforge.badgeproject.gatt.command.getActionId
 import com.thejebforge.badgeproject.gatt.command.getActionName
 import com.thejebforge.badgeproject.gatt.command.readCharacteristic
+import com.thejebforge.badgeproject.gatt.command.readCharacteristicToInt
+import com.thejebforge.badgeproject.gatt.command.readCharacteristicToString
 import com.thejebforge.badgeproject.gatt.command.withService
 import com.thejebforge.badgeproject.util.BoardConstants
 import com.thejebforge.badgeproject.util.callbackCollector
@@ -17,35 +19,13 @@ fun ByteArray.toInt(): Int {
     return buffer.getInt()
 }
 
+fun ByteArray.toBoolean(): Boolean {
+    val buffer = ByteBuffer.wrap(this)
+    buffer.order(ByteOrder.LITTLE_ENDIAN)
+    return buffer.get() != 0.toByte()
+}
+
 fun ByteArray.toStringWithoutNulls(): String = String(this).trim(Char(0))
-
-fun GATTHelper.readCharacteristicToString(svc: String, chr: String, callback: (String?) -> Unit) {
-    withService(svc) {
-        readCharacteristic(chr) {
-                (chr, data) ->
-            if (chr == null || data == null) {
-                callback(null)
-                return@readCharacteristic
-            }
-
-            callback(data.toStringWithoutNulls())
-        }
-    }
-}
-
-fun GATTHelper.readCharacteristicToInt(svc: String, chr: String, callback: (Int?) -> Unit) {
-    withService(svc) {
-        readCharacteristic(chr) {
-                (chr, data) ->
-            if (chr == null || data == null) {
-                callback(null)
-                return@readCharacteristic
-            }
-
-            callback(data.toInt())
-        }
-    }
-}
 
 fun GATTHelper.getDeviceMode(callback: (Int?) -> Unit) = this.apply {
     readCharacteristicToInt(BoardConstants.CHARACTER_SVC, BoardConstants.CURRENT_MODE_CHR, callback)
@@ -63,7 +43,7 @@ fun GATTHelper.getActionCount(callback: (Int?) -> Unit) = this.apply {
     readCharacteristicToInt(BoardConstants.CHARACTER_SVC, BoardConstants.ACTION_COUNT_CHR, callback)
 }
 
-fun GATTHelper.getActionList(callback: (List<ActionResponse<Pair<String, String>>>?) -> Unit) {
+fun GATTHelper.getActionList(callback: (List<ActionResponse<Pair<String, String>>>?) -> Unit) = this.apply {
     getActionCount {
         count ->
         if (count == null) {

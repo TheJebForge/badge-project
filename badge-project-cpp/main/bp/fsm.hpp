@@ -7,7 +7,9 @@ namespace bp {
     enum class ClientCommandType : uint8_t {
         GetAction,
         GetActionDisplayName,
-        InvokeAction
+        InvokeAction,
+        GetCharacterName,
+        SwitchCharacter
     };
 
     ClientCommandResponse bluetooth_command_handler(uint8_t op, std::span<char, 200> data);
@@ -85,6 +87,7 @@ namespace bp {
 
         void address_queue();
         void switch_state_internal(const std::string& state_name);
+        void switch_state_unchecked(const std::string& state_name);
 
         bool cook_if_needed(const std::string& state_name) const;
         void set_progress_visible(bool visibility);

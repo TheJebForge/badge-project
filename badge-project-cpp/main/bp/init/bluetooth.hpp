@@ -32,6 +32,7 @@ namespace bp {
     constexpr auto CHARACTER_NAME_CHR_UUID = "00000002-467e-413f-9559-419eb1a367a7";
     constexpr auto CHARACTER_SPECIES_CHR_UUID = "00000003-467e-413f-9559-419eb1a367a7";
     constexpr auto ACTION_COUNT_CHR_UUID = "00000004-467e-413f-9559-419eb1a367a7";
+    constexpr auto CHARACTER_COUNT_CHR_UUID = "00000005-467e-413f-9559-419eb1a367a7";
     constexpr auto COMMAND_CHR_UUID = "00000010-467e-413f-9559-419eb1a367a7";
     constexpr auto RESPONSE_CHR_UUID = "00000011-467e-413f-9559-419eb1a367a7";
 
@@ -56,6 +57,7 @@ namespace bp {
         NimBLECharacteristic* character_name_chr;
         NimBLECharacteristic* character_species_chr;
         NimBLECharacteristic* action_count_chr;
+        NimBLECharacteristic* character_count_chr;
         NimBLECharacteristic* command_chr;
         NimBLECharacteristic* response_chr;
 
@@ -75,6 +77,7 @@ namespace bp {
         explicit BPCharacteristics(NimBLEService* char_svc, NimBLEService* scr_svc);
 
     public:
+        void set_character_count(const std::vector<std::string>& names) const;
         void set_character_info(const std::string& name, const std::string& species, std::size_t action_count) const;
         void set_command_handler(CommandHandler command_handler);
 

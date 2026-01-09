@@ -29,5 +29,17 @@ object PayloadCreator {
         buf.put(id.toByteArray())
         return buf.array()
     }
+
+    fun getCharacterName(index: UShort): ByteArray {
+        val buf = getNewBuffer().putHeader(BoardConstants.GET_CHARACTER_NAME_OP)
+        buf.putShort(index.toShort())
+        return buf.array()
+    }
+
+    fun switchCharacter(name: String): ByteArray {
+        val buf = getNewBuffer().putHeader(BoardConstants.SWITCH_CHARACTER_OP)
+        buf.put(name.toByteArray())
+        return buf.array()
+    }
 }
 

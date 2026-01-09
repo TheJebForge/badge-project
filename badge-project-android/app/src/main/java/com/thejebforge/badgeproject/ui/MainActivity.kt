@@ -145,16 +145,21 @@ class MainActivity @Inject constructor() : ComponentActivity() {
                             device, callback ->
                             serviceConnectedCallback = {
                                 success ->
-                                callback(success)
+                                mainExecutor.execute {
+                                    Log.i("Main", "Received result ${success}")
 
-                                if (success) {
-                                    mainExecutor.execute {
+                                    callback(success)
+
+                                    if (success) {
                                         if (navController.currentDestination?.route != DeviceControlViewModel.name) {
                                             navController.navigate(DeviceControlViewModel.name)
                                         }
                                     }
                                 }
                             }
+
+                            service.value?.binder?.connectedAction = serviceConnectedCallback
+
                             Intent(
                                 this@MainActivity,
                                 BoardService::class.java

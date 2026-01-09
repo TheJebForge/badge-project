@@ -17,7 +17,7 @@
 constexpr auto TAG = "char_fsm";
 constexpr uint32_t TASK_STACK = 0x2000;
 constexpr UBaseType_t TASK_PRIORITY = configMAX_PRIORITIES / 2;
-constexpr TickType_t TASK_INTERVAL = 100 / portTICK_PERIOD_MS;
+constexpr TickType_t TASK_INTERVAL = 50 / portTICK_PERIOD_MS;
 
 constexpr auto PROGRESS_BAR_HEIGHT = 3;
 
@@ -30,6 +30,8 @@ namespace fs = std::filesystem;
 static TaskHandle_t fsm_task_handle;
 
 static CharacterFSM char_fsm;
+
+static std::vector<std::string> character_names;
 
 ClientCommandResponse bp::bluetooth_command_handler(
     uint8_t op, const std::span<char, 200> data
@@ -79,6 +81,40 @@ ClientCommandResponse bp::bluetooth_command_handler(
             }
 
             return {false, "Unknown action"};
+        }
+
+        case ClientCommandType::GetCharacterName: {
+            uint16_t character_index = 0;
+            memcpy(&character_index, data.data(), sizeof character_index);
+
+            ESP_LOGI(TAG, "GetCharacterName(%d)", character_index);
+
+            for (const auto& name: character_names) {
+                if (character_index-- == 0) {
+                    ESP_LOGI(TAG, "returning '%s'", name.c_str());
+                    return {true, name};
+                }
+            }
+
+            return {false, "Unknown action"};
+        }
+
+        case ClientCommandType::SwitchCharacter: {
+            std::string character_name{data.data(), data.size()};
+            character_name.erase(std::ranges::find(character_name, '\0'), character_name.end());
+
+            ESP_LOGI(TAG, "SwitchCharacter(%s)", character_name.c_str());
+
+            if (std::ranges::find(character_names, character_name) != character_names.end()) {
+                ESP_LOGI(TAG, "trying to load character '%s'", character_name.c_str());
+
+                data::select_character(character_names, character_name);
+                char_fsm.load_character_sl(character_name);
+
+                return {true, ""};
+            }
+
+            return {false, "Unknown character"};
         }
 
         default:
@@ -173,6 +209,17 @@ void CharacterFSM::load_character_sl(const std::string& name) {
 
     bp::data::load_character_data(character_data, name);
     bp::data::preload_data(preloaded_data, character_data);
+
+    loaded_images = {};
+    loaded_descriptors = {};
+
+    switch_state_unchecked(character_data.default_state);
+
+    if (char_name_obj != nullptr) {
+        LVGLLockGuard guard(0);
+
+        lv_label_set_text(char_name_obj, character_data.name.c_str());
+    }
 
     bp_characteristics->set_character_info(
         character_data.name,
@@ -484,8 +531,32 @@ void CharacterFSM::switch_state_internal(const std::string& state_name) {
     mark_dirty();
 }
 
+void CharacterFSM::switch_state_unchecked(const std::string& state_name) {
+    if (!cook_if_needed(state_name)) {
+        ESP_LOGI(TAG, "Switching to '%s' state", state_name.c_str());
+
+        CriticalGuard guard(&spinlock);
+        switch_state_internal(state_name);
+
+        // Clear unnecessary memory
+        loaded_images = {};
+        loaded_descriptors = {};
+    } else {
+        ESP_LOGI(TAG, "'%s' state needs to be cooked first, started task", state_name.c_str());
+
+        {
+            CriticalGuard guard(&spinlock);
+            state_is_cooking = true;
+            being_cooked_state = state_name;
+        }
+
+        set_cooking_progress(0, 100);
+        set_progress_visible(true);
+    }
+}
+
 void CharacterFSM::switch_state_sl(const std::string& next_state) {
-    if (!is_free_sl()) {
+    if (!is_free_sl() || !is_ready_sl()) {
         ESP_LOGI(TAG, "Can't switch to '%s' state right now, queuing if possible", next_state.c_str());
 
         CriticalGuard guard(&spinlock);
@@ -495,27 +566,7 @@ void CharacterFSM::switch_state_sl(const std::string& next_state) {
         return;
     }
 
-    if (!cook_if_needed(next_state)) {
-        ESP_LOGI(TAG, "Switching to '%s' state", next_state.c_str());
-
-        CriticalGuard guard(&spinlock);
-        switch_state_internal(next_state);
-
-        // Clear unnecessary memory
-        loaded_images = {};
-        loaded_descriptors = {};
-    } else {
-        ESP_LOGI(TAG, "'%s' state needs to be cooked first, started task", next_state.c_str());
-
-        {
-            CriticalGuard guard(&spinlock);
-            state_is_cooking = true;
-            being_cooked_state = next_state;
-        }
-
-        set_cooking_progress(0, 100);
-        set_progress_visible(true);
-    }
+    switch_state_unchecked(next_state);
 }
 
 void CharacterFSM::address_queue() {
@@ -637,6 +688,7 @@ CharacterFSM::BusyLock CharacterFSM::get_busy_sl() {
 
 void CharacterFSM::wait_until_free_sl() {
     while (!is_free_sl()) {
+        ESP_LOGI(TAG, "Waiting FSM to be free...");
         vTaskDelay(50 / portTICK_PERIOD_MS);
     }
 }
@@ -971,16 +1023,18 @@ void fsm_task(void*) {
     TaskDeleteGuard task_guard{};
     ESP_LOGI(TAG, "FSM Task running!");
 
-    const auto characters = data::list_characters();
+    character_names = data::list_characters();
 
-    if (characters.empty()) {
+    bp_characteristics->set_character_count(character_names);
+
+    if (character_names.empty()) {
         ESP_LOGE(TAG, "There's no characters!");
     }
 
-    auto selected_character_name = data::get_selected_character_name(characters);
+    auto selected_character_name = data::get_selected_character_name(character_names);
     if (!selected_character_name) {
-        selected_character_name = characters.front();
-        data::select_character(characters, *selected_character_name);
+        selected_character_name = character_names.front();
+        data::select_character(character_names, *selected_character_name);
     }
 
     ESP_LOGI(TAG, "Loading '%s' character data...", selected_character_name->c_str());
@@ -991,8 +1045,6 @@ void fsm_task(void*) {
 
     char_fsm.create_ui();
     bp_characteristics->set_command_handler(bluetooth_command_handler);
-
-    char_fsm.switch_to_default_sl();
 
     // ReSharper disable once CppDFAEndlessLoop
     while (char_fsm.alive) {

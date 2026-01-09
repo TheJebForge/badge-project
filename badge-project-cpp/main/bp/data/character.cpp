@@ -475,6 +475,9 @@ namespace bp::data {
     }
 
     void preload_data(PreloadedData& preloaded_data, const Character& character) {
+        preloaded_data.animation_frames.clear();
+        preloaded_data.image_data.clear();
+
         for (const auto& [_, state]: character.states) {
             if (const auto* image = std::get_if<StateImage>(&state.image)) {
                 if (!image->preload) continue;

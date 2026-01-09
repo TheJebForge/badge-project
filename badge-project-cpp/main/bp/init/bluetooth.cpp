@@ -151,6 +151,10 @@ bp::BPCharacteristics::BPCharacteristics(NimBLEService* char_svc, NimBLEService*
         ACTION_COUNT_CHR_UUID,
         READ | READ_ENC
     );
+    character_count_chr = char_svc->createCharacteristic(
+        CHARACTER_COUNT_CHR_UUID,
+        READ | READ_ENC
+    );
     command_chr = char_svc->createCharacteristic(
         COMMAND_CHR_UUID,
         WRITE | WRITE_ENC
@@ -170,6 +174,10 @@ bp::BPCharacteristics::BPCharacteristics(NimBLEService* char_svc, NimBLEService*
     static BacklightToggler toggler{};
     backlight_chr->setCallbacks(&toggler);
     backlight_chr->setValue(get_backlight_state());
+}
+
+void bp::BPCharacteristics::set_character_count(const std::vector<std::string>& names) const {
+    character_count_chr->setValue(names.size());
 }
 
 void bp::BPCharacteristics::set_character_info(

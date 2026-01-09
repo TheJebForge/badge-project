@@ -7,7 +7,10 @@ import androidx.annotation.RequiresPermission
 import com.thejebforge.badgeproject.gatt.GATTCommandHandler
 import com.thejebforge.badgeproject.gatt.GATTHelper
 import com.thejebforge.badgeproject.gatt.getCharacteristic
-import java.util.UUID
+import com.thejebforge.badgeproject.gatt.toBoolean
+import com.thejebforge.badgeproject.gatt.toInt
+import com.thejebforge.badgeproject.gatt.toStringWithoutNulls
+import java.util.*
 
 class ReadCharacteristic(
     gattServer: BluetoothGatt,
@@ -37,20 +40,6 @@ class ReadCharacteristic(
     }
 }
 
-class Service internal constructor(
-    val gatt: GATTHelper,
-    val svcUUID: UUID
-)
-
-fun GATTHelper.withService(svcUUID: UUID, withCallback: Service.() -> Unit) = this.apply {
-    withCallback(Service(this, svcUUID))
-}
-
-fun GATTHelper.withService(svcUUID: String, withCallback: Service.() -> Unit) = withService(
-    UUID.fromString(svcUUID),
-    withCallback
-)
-
 fun Service.readCharacteristic(chrUUID: UUID, readCallback: (Pair<BluetoothGattCharacteristic?, ByteArray?>) -> Unit) {
     with(gatt) {
         commandHandler.appendCommand(
@@ -67,4 +56,46 @@ fun Service.readCharacteristic(chrUUID: UUID, readCallback: (Pair<BluetoothGattC
 
 fun Service.readCharacteristic(chrUUID: String, readCallback: (Pair<BluetoothGattCharacteristic?, ByteArray?>) -> Unit) {
     readCharacteristic(UUID.fromString(chrUUID), readCallback)
+}
+
+fun GATTHelper.readCharacteristicToString(svc: String, chr: String, callback: (String?) -> Unit) = this.apply {
+    withService(svc) {
+        readCharacteristic(chr) {
+                (chr, data) ->
+            if (chr == null || data == null) {
+                callback(null)
+                return@readCharacteristic
+            }
+
+            callback(data.toStringWithoutNulls())
+        }
+    }
+}
+
+fun GATTHelper.readCharacteristicToInt(svc: String, chr: String, callback: (Int?) -> Unit) = this.apply {
+    withService(svc) {
+        readCharacteristic(chr) {
+                (chr, data) ->
+            if (chr == null || data == null) {
+                callback(null)
+                return@readCharacteristic
+            }
+
+            callback(data.toInt())
+        }
+    }
+}
+
+fun GATTHelper.readCharacteristicToBool(svc: String, chr: String, callback: (Boolean?) -> Unit) = this.apply {
+    withService(svc) {
+        readCharacteristic(chr) {
+                (chr, data) ->
+            if (chr == null || data == null) {
+                callback(null)
+                return@readCharacteristic
+            }
+
+            callback(data.toBoolean())
+        }
+    }
 }

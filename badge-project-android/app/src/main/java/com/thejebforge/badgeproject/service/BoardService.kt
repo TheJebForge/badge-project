@@ -31,7 +31,9 @@ import com.thejebforge.badgeproject.data.intermediate.Device
 import com.thejebforge.badgeproject.gatt.GATTHelper
 import com.thejebforge.badgeproject.gatt.command.discoverServices
 import com.thejebforge.badgeproject.gatt.command.enableCommands
+import com.thejebforge.badgeproject.gatt.command.getBacklightState
 import com.thejebforge.badgeproject.gatt.command.invokeAction
+import com.thejebforge.badgeproject.gatt.command.setBacklightState
 import com.thejebforge.badgeproject.gatt.getActionList
 import com.thejebforge.badgeproject.gatt.getCharacterName
 import com.thejebforge.badgeproject.gatt.getCharacterSpecies
@@ -174,6 +176,54 @@ class BoardService : Service() {
         }
     }
 
+    fun updateBoardInfo() {
+        gatt?.let {
+            gatt ->
+            gatt.getDeviceMode {
+                    maybeMode ->
+                if (maybeMode == null) {
+                    state.character.value = CharacterState.Failed
+                    return@getDeviceMode
+                }
+
+                val mode = BoardMode.fromInt(maybeMode)
+                if (mode == null) {
+                    state.character.value = CharacterState.Failed
+                    return@getDeviceMode
+                }
+
+                val charInfo = CharacterInfo(
+                    mode = mutableStateOf(mode)
+                )
+
+                gatt.getCharacterName {
+                    charInfo.name.value = it
+                }.getCharacterSpecies {
+                    charInfo.species.value = it
+                }.getActionList {
+                        receivedList ->
+                    if (receivedList == null) return@getActionList
+
+                    charInfo.actions.let {
+                            actionList ->
+                        actionList.clear()
+
+                        for (action in receivedList) {
+                            val (id, name) = action.getOrNull() ?: continue
+                            actionList.add(CharacterAction(id, name))
+                        }
+                    }
+                }.getBacklightState {
+                    if (it == null) return@getBacklightState
+
+                    state.backlight.value = it
+                }
+
+                state.character.value = CharacterState.Loaded(charInfo)
+            }
+        }
+    }
+
     private fun actuallyConnect(device: BluetoothDevice) {
         Log.i(TAG, "Connecting to ${device.address}")
 
@@ -192,43 +242,7 @@ class BoardService : Service() {
                     Log.i(TAG, "Discovered device services...")
                 }.enableCommands {
                     Log.i(TAG, "Commands enabled...")
-                }.getDeviceMode {
-                    maybeMode ->
-                    if (maybeMode == null) {
-                        state.character.value = CharacterState.Failed
-                        return@getDeviceMode
-                    }
-
-                    val mode = BoardMode.fromInt(maybeMode)
-                    if (mode == null) {
-                        state.character.value = CharacterState.Failed
-                        return@getDeviceMode
-                    }
-
-                    val charInfo = CharacterInfo(
-                        mode = mutableStateOf(mode)
-                    )
-
-                    gatt.getCharacterName {
-                        charInfo.name.value = it
-                    }.getCharacterSpecies {
-                        charInfo.species.value = it
-                    }.getActionList {
-                        receivedList ->
-                        if (receivedList == null) return@getActionList
-
-                        charInfo.actions.let {
-                            actionList ->
-                            actionList.clear()
-
-                            for (action in receivedList) {
-                                val (id, name) = action.getOrNull() ?: continue
-                                actionList.add(CharacterAction(id, name))
-                            }
-                        }
-                    }
-
-                    state.character.value = CharacterState.Loaded(charInfo)
+                    updateBoardInfo()
                 }
 
                 Log.i(TAG, "All commands were sent")
@@ -256,6 +270,16 @@ class BoardService : Service() {
         gatt?.invokeAction(id) {}
     }
 
+    fun toggleBacklight(onDone: () -> Unit) {
+        val newBacklight = !state.backlight.value
+        gatt?.setBacklightState(newBacklight) {
+            if (it) {
+                state.backlight.value = newBacklight
+            }
+            onDone()
+        }
+    }
+
     private fun start(intent: Intent?): Boolean {
         val action = intent?.action?.let { Json.decodeFromString<StartAction>(it) }
         if (action == null) {
@@ -270,7 +294,9 @@ class BoardService : Service() {
 
                 if (device == state.currentDevice.value) {
                     Log.i(TAG, "Already connected, skipping connection process")
-                    binder.connectedAction?.invoke(true)
+                    handler.postDelayed({
+                        binder.connectedAction?.invoke(true)
+                    }, 100)
                     return true
                 }
 
@@ -335,7 +361,7 @@ class BoardService : Service() {
         return START_SERVICE_FLAG
     }
 
-    private val binder = BoardServiceBinder()
+    val binder = BoardServiceBinder()
 
     override fun onBind(intent: Intent?): IBinder {
         return binder

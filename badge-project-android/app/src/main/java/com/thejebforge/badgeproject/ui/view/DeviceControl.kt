@@ -7,6 +7,12 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.filled.Brightness1
+import androidx.compose.material.icons.filled.Brightness7
+import androidx.compose.material.icons.outlined.Brightness1
+import androidx.compose.material.icons.rounded.Bluetooth
+import androidx.compose.material.icons.rounded.BluetoothConnected
+import androidx.compose.material.icons.rounded.BluetoothDisabled
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -35,6 +41,7 @@ class DeviceControlViewModel @Inject constructor() : ViewModel() {
     }
 
     var device: Device? = null
+    var backlightUpdating: Boolean = false
 }
 
 @Composable
@@ -47,6 +54,16 @@ fun DeviceControlScreen(
         viewModel.device,
         deviceConnected = service?.state?.deviceConnected?.value ?: false,
         navigateBack,
+        service?.state?.backlight?.value ?: false,
+        viewModel.backlightUpdating,
+        {
+            service?.run {
+                viewModel.backlightUpdating = true
+                toggleBacklight {
+                    viewModel.backlightUpdating = false
+                }
+            }
+        },
         service?.let {
             service ->
             UIDeviceMode.fromCharacterState(
@@ -96,6 +113,9 @@ fun DeviceControlScreenContent(
     device: Device?,
     deviceConnected: Boolean,
     navigateBack: () -> Unit,
+    backlight: Boolean,
+    backlightUpdating: Boolean,
+    toggleBacklight: () -> Unit,
     modeInfo: UIDeviceMode?
 ) {
     Surface {
@@ -139,11 +159,11 @@ fun DeviceControlScreenContent(
                         horizontalArrangement = Arrangement.spacedBy(7.dp)
                     ) {
                         Icon(
-                            painterResource(if (deviceConnected) {
-                                R.drawable.bluetooth_connected_24px
+                            if (deviceConnected) {
+                                Icons.Rounded.BluetoothConnected
                             } else {
-                                R.drawable.bluetooth_disabled_24px
-                            }),
+                                Icons.Rounded.BluetoothDisabled
+                            },
                             "Connection Status"
                         )
 
@@ -158,6 +178,27 @@ fun DeviceControlScreenContent(
                             )
                         }
                     }
+                }
+
+                IconButton(
+                    onClick = toggleBacklight
+                ) {
+                    if (backlightUpdating) {
+                        CircularProgressIndicator(
+                            Modifier.padding(5.dp),
+                            color = MaterialTheme.colorScheme.primary,
+                            strokeWidth = 3.dp
+                        )
+                        return@IconButton
+                    }
+
+                    Icon(
+                        if (backlight)
+                            Icons.Default.Brightness7
+                        else
+                            Icons.Outlined.Brightness1,
+                        "Device Backlight"
+                    )
                 }
             }
 
@@ -309,6 +350,9 @@ private fun Preview() {
             Device("BP Board", "00:1A:2B:3C:4D:5E"),
             deviceConnected = true,
             navigateBack = {},
+            backlight = true,
+            backlightUpdating = false,
+            toggleBacklight = {},
             modeInfo = UIDeviceMode.Character(
                 "Test Character",
                 "Some species",
@@ -331,6 +375,9 @@ private fun PreviewNotConnected() {
             Device("BP Board", "00:1A:2B:3C:4D:5E"),
             deviceConnected = false,
             navigateBack = {},
+            backlight = true,
+            backlightUpdating = true,
+            toggleBacklight = {},
             modeInfo = UIDeviceMode.Character(
                 "Test Character",
                 "Some species",
@@ -353,6 +400,9 @@ private fun PreviewNotLoaded() {
             Device("BP Board", "00:1A:2B:3C:4D:5E"),
             deviceConnected = true,
             navigateBack = {},
+            backlight = false,
+            backlightUpdating = false,
+            toggleBacklight = {},
             modeInfo = null
         )
     }
@@ -368,6 +418,9 @@ private fun PreviewFailed() {
             Device("BP Board", "00:1A:2B:3C:4D:5E"),
             deviceConnected = true,
             navigateBack = {},
+            backlight = false,
+            backlightUpdating = false,
+            toggleBacklight = {},
             modeInfo = UIDeviceMode.None
         )
     }

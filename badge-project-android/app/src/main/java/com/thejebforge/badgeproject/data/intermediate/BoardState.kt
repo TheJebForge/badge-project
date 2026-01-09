@@ -44,5 +44,6 @@ data class BoardState(
     val currentDevice: MutableState<Device?> = mutableStateOf(null),
     val deviceConnected: MutableState<Boolean> = mutableStateOf(false),
     val character: MutableState<CharacterState> = mutableStateOf(CharacterState.Loading),
-    val hadConnection: MutableState<Boolean> = mutableStateOf(false)
+    val hadConnection: MutableState<Boolean> = mutableStateOf(false),
+    val backlight: MutableState<Boolean> = mutableStateOf(false)
 )
