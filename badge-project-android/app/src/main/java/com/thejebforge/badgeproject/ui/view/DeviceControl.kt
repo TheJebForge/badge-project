@@ -7,28 +7,31 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
-import androidx.compose.material.icons.filled.Brightness1
 import androidx.compose.material.icons.filled.Brightness7
 import androidx.compose.material.icons.outlined.Brightness1
-import androidx.compose.material.icons.rounded.Bluetooth
+import androidx.compose.material.icons.rounded.ArrowDropDown
+import androidx.compose.material.icons.rounded.ArrowDropUp
 import androidx.compose.material.icons.rounded.BluetoothConnected
 import androidx.compose.material.icons.rounded.BluetoothDisabled
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
 import com.thejebforge.badgeproject.R
-import com.thejebforge.badgeproject.data.intermediate.Device
 import com.thejebforge.badgeproject.data.intermediate.BoardMode
-import com.thejebforge.badgeproject.service.BoardService
 import com.thejebforge.badgeproject.data.intermediate.CharacterAction
 import com.thejebforge.badgeproject.data.intermediate.CharacterState
+import com.thejebforge.badgeproject.data.intermediate.Device
+import com.thejebforge.badgeproject.service.BoardService
 import com.thejebforge.badgeproject.ui.theme.BadgeProjectTheme
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
@@ -64,14 +67,13 @@ fun DeviceControlScreen(
                 }
             }
         },
-        service?.let {
-            service ->
+        service?.let { service ->
             UIDeviceMode.fromCharacterState(
-                service.state.character.value
-            ) {
-                id ->
-                service.invokeAction(id)
-            }
+                service.state.characterList,
+                service.state.character.value,
+                service::invokeAction,
+                service::switchCharacter
+            )
         }
     )
 }
@@ -80,10 +82,13 @@ sealed class UIDeviceMode(
     val mode: Int
 ) {
     data class Character(
+        val characters: List<String>,
+        val id: String,
         val name: String,
         val species: String,
         val actions: List<CharacterAction>,
-        val runAction: (String) -> Unit
+        val runAction: (String) -> Unit,
+        val switchCharacter: (String) -> Unit
     ) : UIDeviceMode(
         R.string.character_mode
     )
@@ -91,16 +96,25 @@ sealed class UIDeviceMode(
     data object None : UIDeviceMode(R.string.no_devices_found)
 
     companion object {
-        fun fromCharacterState(state: CharacterState, runAction: (String) -> Unit): UIDeviceMode? = when (state) {
+        fun fromCharacterState(
+            characters: List<String>,
+            state: CharacterState,
+            runAction: (String) -> Unit,
+            switchCharacter: (String) -> Unit
+        ): UIDeviceMode? = when (state) {
             is CharacterState.Loaded if state.info.mode.value == BoardMode.CHARACTER ->
                 with(state.info) {
                     Character(
+                        characters,
+                        id.value ?: "Loading...",
                         name.value ?: "Loading...",
                         species.value ?: "Loading...",
                         actions.toList(),
-                        runAction
+                        runAction,
+                        switchCharacter
                     )
                 }
+
             is CharacterState.Loaded -> None
             CharacterState.Loading -> null
             CharacterState.Failed -> None
@@ -139,7 +153,7 @@ fun DeviceControlScreenContent(
                     )
                 }
 
-                Text (
+                Text(
                     stringResource(R.string.device_control),
                     modifier = Modifier.weight(1f),
                     style = MaterialTheme.typography.headlineSmall
@@ -307,6 +321,67 @@ fun DeviceControlScreenContent(
                     LazyColumn(
                         verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
+                        item {
+                            var expanded by remember { mutableStateOf(false) }
+
+                            Surface(
+                                Modifier.fillMaxWidth()
+                                    .clickable {
+                                        expanded = true
+                                    },
+                                color = MaterialTheme.colorScheme.secondary,
+                                shape = RoundedCornerShape(10.dp)
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column(
+                                        Modifier.padding(15.dp)
+                                            .weight(1f),
+                                    ) {
+                                        Text(
+                                            stringResource(R.string.switch_character),
+                                            style = MaterialTheme.typography.labelMedium
+                                        )
+                                        Text(
+                                            stringResource(R.string.character_id, modeInfo.id),
+                                            style = MaterialTheme.typography.headlineMedium
+                                        )
+                                    }
+                                    Icon(
+                                        if (expanded) {
+                                            Icons.Rounded.ArrowDropUp
+                                        } else {
+                                            Icons.Rounded.ArrowDropDown
+                                        },
+                                        "Dropdown",
+                                        Modifier.size(52.dp)
+                                            .padding(10.dp, 0.dp)
+                                    )
+                                }
+
+                                DropdownMenu(
+                                    expanded = expanded,
+                                    onDismissRequest = {
+                                        expanded = false
+                                    },
+                                ) {
+                                    modeInfo.characters.forEach {
+                                        id ->
+                                        DropdownMenuItem(
+                                            text = {
+                                                Text(id)
+                                            },
+                                            onClick = {
+                                                expanded = false
+                                                modeInfo.switchCharacter(id)
+                                            }
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
                         items(modeInfo.actions) { action ->
                             Surface(
                                 Modifier.fillMaxWidth()
@@ -354,11 +429,16 @@ private fun Preview() {
             backlightUpdating = false,
             toggleBacklight = {},
             modeInfo = UIDeviceMode.Character(
+                listOf(
+                    "aaa"
+                ),
+                "testy",
                 "Test Character",
                 "Some species",
                 listOf(
                     CharacterAction("test", "What")
                 ),
+                {},
                 {}
             )
         )
@@ -379,11 +459,16 @@ private fun PreviewNotConnected() {
             backlightUpdating = true,
             toggleBacklight = {},
             modeInfo = UIDeviceMode.Character(
+                listOf(
+                    "aaa"
+                ),
+                "testy",
                 "Test Character",
                 "Some species",
                 listOf(
                     CharacterAction("test", "What")
                 ),
+                {},
                 {}
             )
         )

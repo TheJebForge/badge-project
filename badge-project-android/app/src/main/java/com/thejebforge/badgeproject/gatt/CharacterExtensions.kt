@@ -4,6 +4,7 @@ import com.thejebforge.badgeproject.gatt.command.ActionResponse
 import com.thejebforge.badgeproject.gatt.command.asSuccess
 import com.thejebforge.badgeproject.gatt.command.getActionId
 import com.thejebforge.badgeproject.gatt.command.getActionName
+import com.thejebforge.badgeproject.gatt.command.getCharacter
 import com.thejebforge.badgeproject.gatt.command.readCharacteristic
 import com.thejebforge.badgeproject.gatt.command.readCharacteristicToInt
 import com.thejebforge.badgeproject.gatt.command.readCharacteristicToString
@@ -29,6 +30,10 @@ fun ByteArray.toStringWithoutNulls(): String = String(this).trim(Char(0))
 
 fun GATTHelper.getDeviceMode(callback: (Int?) -> Unit) = this.apply {
     readCharacteristicToInt(BoardConstants.CHARACTER_SVC, BoardConstants.CURRENT_MODE_CHR, callback)
+}
+
+fun GATTHelper.getCharacterId(callback: (String?) -> Unit) = this.apply {
+    readCharacteristicToString(BoardConstants.CHARACTER_SVC, BoardConstants.CHARACTER_ID_CHR, callback)
 }
 
 fun GATTHelper.getCharacterName(callback: (String?) -> Unit) = this.apply {
@@ -68,6 +73,35 @@ fun GATTHelper.getActionList(callback: (List<ActionResponse<Pair<String, String>
                                 collect(Pair(id, name).asSuccess())
                             }, collect)
                         }
+                    }, collect)
+                }
+            },
+            callback
+        )
+    }
+}
+
+fun GATTHelper.getCharacterCount(callback: (Int?) -> Unit) = this.apply {
+    readCharacteristicToInt(BoardConstants.CHARACTER_SVC, BoardConstants.CHARACTER_COUNT_CHR, callback)
+}
+
+fun GATTHelper.getCharacterList(callback: (List<ActionResponse<String>>?) -> Unit) = this.apply {
+    getCharacterCount {
+        count ->
+        if (count == null) {
+            callback(null)
+            return@getCharacterCount
+        }
+
+        callbackCollector(
+            0..<count,
+            {
+                element, collect ->
+                getCharacter(element) {
+                    idResult ->
+                    idResult.fold({
+                        id ->
+                        collect(id.asSuccess())
                     }, collect)
                 }
             },

@@ -29,6 +29,7 @@ data class CharacterAction(
 
 data class CharacterInfo(
     val mode: MutableState<BoardMode> = mutableStateOf(BoardMode.CHARACTER),
+    val id: MutableState<String?> = mutableStateOf(null),
     val name: MutableState<String?> = mutableStateOf(null),
     val species: MutableState<String?> = mutableStateOf(null),
     val actions: SnapshotStateList<CharacterAction> = mutableStateListOf()
@@ -44,6 +45,7 @@ data class BoardState(
     val currentDevice: MutableState<Device?> = mutableStateOf(null),
     val deviceConnected: MutableState<Boolean> = mutableStateOf(false),
     val character: MutableState<CharacterState> = mutableStateOf(CharacterState.Loading),
+    val characterList: SnapshotStateList<String> = mutableStateListOf(),
     val hadConnection: MutableState<Boolean> = mutableStateOf(false),
     val backlight: MutableState<Boolean> = mutableStateOf(false)
 )

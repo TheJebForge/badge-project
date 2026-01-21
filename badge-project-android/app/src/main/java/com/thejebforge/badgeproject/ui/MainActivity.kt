@@ -8,7 +8,9 @@ import android.content.Context
 import android.content.Intent
 import android.content.ServiceConnection
 import android.os.Bundle
+import android.os.Handler
 import android.os.IBinder
+import android.os.Looper
 import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -26,6 +28,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.thejebforge.badgeproject.data.intermediate.Device
 import com.thejebforge.badgeproject.service.BoardService
+import com.thejebforge.badgeproject.service.BoardServiceImpl
 import com.thejebforge.badgeproject.ui.theme.BadgeProjectTheme
 import com.thejebforge.badgeproject.ui.view.*
 import com.thejebforge.badgeproject.util.BluetoothHelper
@@ -44,6 +47,7 @@ class MainActivity @Inject constructor() : ComponentActivity() {
     private var permissionLauncher: ActivityResultLauncher<Array<String>>? = null
     private var service: MutableState<BoardService?> = mutableStateOf(null)
     private var serviceConnectedCallback: ((Boolean) -> Unit)? = null
+    private val handler = Handler(Looper.getMainLooper())
 
     private val serviceConnection = object : ServiceConnection {
         override fun onServiceConnected(name: ComponentName, service: IBinder) {
@@ -87,7 +91,7 @@ class MainActivity @Inject constructor() : ComponentActivity() {
                     }
                 }
             }
-            permissionsGranted()
+            permissionsGranted(true)
         }
 
         setContent {
@@ -146,8 +150,6 @@ class MainActivity @Inject constructor() : ComponentActivity() {
                             serviceConnectedCallback = {
                                 success ->
                                 mainExecutor.execute {
-                                    Log.i("Main", "Received result ${success}")
-
                                     callback(success)
 
                                     if (success) {
@@ -162,7 +164,7 @@ class MainActivity @Inject constructor() : ComponentActivity() {
 
                             Intent(
                                 this@MainActivity,
-                                BoardService::class.java
+                                BoardServiceImpl::class.java
                             ).apply {
                                 action = BoardService.StartAction.Connect(device).serialize()
                             }.also {
@@ -233,13 +235,18 @@ class MainActivity @Inject constructor() : ComponentActivity() {
             when(it) {
                 is StartAction.OpenDevice -> {
                     Log.i(MainActivity::class.simpleName, "Trying to open device control for ${it.device.name} (${it.device.mac})")
+                    handler.postDelayed({
+                        if (navController?.currentDestination?.route != DeviceControlViewModel.name) {
+                            navController?.navigate(DeviceControlViewModel.name)
+                        }
+                    }, 200L)
                 }
             }
         }
 
         Intent(
             this@MainActivity,
-            BoardService::class.java
+            BoardServiceImpl::class.java
         ).also {
             bindService(it, serviceConnection, 0)
         }

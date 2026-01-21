@@ -83,11 +83,11 @@ ClientCommandResponse bp::bluetooth_command_handler(
             return {false, "Unknown action"};
         }
 
-        case ClientCommandType::GetCharacterName: {
+        case ClientCommandType::GetCharacter: {
             uint16_t character_index = 0;
             memcpy(&character_index, data.data(), sizeof character_index);
 
-            ESP_LOGI(TAG, "GetCharacterName(%d)", character_index);
+            ESP_LOGI(TAG, "GetCharacter(%d)", character_index);
 
             for (const auto& name: character_names) {
                 if (character_index-- == 0) {
@@ -200,7 +200,7 @@ bool CharacterFSM::is_ready_sl() {
 }
 
 void CharacterFSM::load_character_sl(const std::string& name) {
-    wait_until_free_sl();
+    wait_until_data_unused_sl();
 
     {
         CriticalGuard guard(&spinlock);
@@ -222,6 +222,7 @@ void CharacterFSM::load_character_sl(const std::string& name) {
     }
 
     bp_characteristics->set_character_info(
+        name,
         character_data.name,
         character_data.species,
         character_data.actions.size()
@@ -667,6 +668,11 @@ CharacterFSM::BusyLock::~BusyLock() {
     free();
 }
 
+bool CharacterFSM::is_data_in_use() {
+    CriticalGuard guard(&spinlock);
+    return !(busy || state_is_cooking || in_tick);
+}
+
 bool CharacterFSM::is_free_sl() {
     CriticalGuard guard(&spinlock);
     return !(busy || state_is_cooking);
@@ -689,6 +695,13 @@ CharacterFSM::BusyLock CharacterFSM::get_busy_sl() {
 void CharacterFSM::wait_until_free_sl() {
     while (!is_free_sl()) {
         ESP_LOGI(TAG, "Waiting FSM to be free...");
+        vTaskDelay(50 / portTICK_PERIOD_MS);
+    }
+}
+
+void CharacterFSM::wait_until_data_unused_sl() {
+    while (!is_data_in_use()) {
+        ESP_LOGI(TAG, "Waiting for gap in FSM ticks...");
         vTaskDelay(50 / portTICK_PERIOD_MS);
     }
 }
@@ -902,8 +915,8 @@ void CharacterFSM::update_display(
 }
 
 void CharacterFSM::set_ui_image(const data::StateImageVariant& variant) {
-    ui_dirty = false;
     auto busy_guard = get_busy_sl();
+    ui_dirty = false;
 
     if (const auto* image_desc = std::get_if<data::StateImage>(&variant)) {
         if (image_desc->preload) {
@@ -918,7 +931,7 @@ void CharacterFSM::set_ui_image(const data::StateImageVariant& variant) {
         play_animation(*anim_desc, animation);
         busy_guard.free();
 
-        switch_state_sl(anim_desc->next_state);
+        switch_state_unchecked(anim_desc->next_state);
     } else if (const auto* sequence_desc = std::get_if<data::StateSequence>(&variant)) {
         // Check if new frame is required
         if (esp_timer_get_time() > next_frame_time) {
@@ -994,6 +1007,11 @@ void CharacterFSM::set_ui_image(const data::StateImageVariant& variant) {
 void CharacterFSM::tick() {
     if (!is_ready_sl()) return;
 
+    {
+        CriticalGuard guard(&spinlock);
+        in_tick = true;
+    }
+
     const auto now = esp_timer_get_time();
     const auto time_since_transition = now - last_transition_time;
 
@@ -1016,6 +1034,11 @@ void CharacterFSM::tick() {
         }
     } catch (std::out_of_range&) {
         ESP_LOGE(TAG, "no state!");
+    }
+
+    {
+        CriticalGuard guard(&spinlock);
+        in_tick = false;
     }
 }
 

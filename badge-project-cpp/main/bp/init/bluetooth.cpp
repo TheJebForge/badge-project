@@ -119,7 +119,10 @@ void bp::BPCharacteristics::BLECommandHandler::onWrite(
         );
     }
 
-    auto _ = parent->response_chr->indicate(response_packet);
+    if (!parent->response_chr->notify(response_packet, connInfo.getConnHandle())) {
+        heap_caps_print_heap_info(MALLOC_CAP_DEFAULT);
+        ESP_LOGI(TAG, "Failed to indicate response!");
+    }
 }
 
 class BacklightToggler final : public NimBLECharacteristicCallbacks {
@@ -138,6 +141,10 @@ bp::BPCharacteristics::BPCharacteristics(NimBLEService* char_svc, NimBLEService*
     mode_chr = char_svc->createCharacteristic(
         CURRENT_MODE_CHR_UUID,
         READ | READ_ENC | WRITE | WRITE_ENC
+    );
+    character_id_chr = char_svc->createCharacteristic(
+        CHARACTER_ID_CHR_UUID,
+        READ | READ_ENC
     );
     character_name_chr = char_svc->createCharacteristic(
         CHARACTER_NAME_CHR_UUID,
@@ -161,7 +168,7 @@ bp::BPCharacteristics::BPCharacteristics(NimBLEService* char_svc, NimBLEService*
     );
     response_chr = char_svc->createCharacteristic(
         RESPONSE_CHR_UUID,
-        READ | READ_ENC | INDICATE
+        READ | READ_ENC | NOTIFY
     );
 
     command_chr->setCallbacks(&this->command_handler);
@@ -181,11 +188,13 @@ void bp::BPCharacteristics::set_character_count(const std::vector<std::string>& 
 }
 
 void bp::BPCharacteristics::set_character_info(
+    const std::string& id,
     const std::string& name,
     const std::string& species,
     const std::size_t action_count
 ) const {
     mode_chr->setValue(0);
+    character_id_chr->setValue(id.c_str());
     character_name_chr->setValue(name.c_str());
     character_species_chr->setValue(species.c_str());
     action_count_chr->setValue(action_count);

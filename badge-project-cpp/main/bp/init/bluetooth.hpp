@@ -29,10 +29,11 @@ namespace bp {
     constexpr auto CHARACTER_SVC_UUID = "c4aa52a4-467e-413f-9559-419eb1a367a7";
 
     constexpr auto CURRENT_MODE_CHR_UUID = "00000001-467e-413f-9559-419eb1a367a7";
-    constexpr auto CHARACTER_NAME_CHR_UUID = "00000002-467e-413f-9559-419eb1a367a7";
-    constexpr auto CHARACTER_SPECIES_CHR_UUID = "00000003-467e-413f-9559-419eb1a367a7";
-    constexpr auto ACTION_COUNT_CHR_UUID = "00000004-467e-413f-9559-419eb1a367a7";
-    constexpr auto CHARACTER_COUNT_CHR_UUID = "00000005-467e-413f-9559-419eb1a367a7";
+    constexpr auto CHARACTER_ID_CHR_UUID = "00000002-467e-413f-9559-419eb1a367a7";
+    constexpr auto CHARACTER_NAME_CHR_UUID = "00000003-467e-413f-9559-419eb1a367a7";
+    constexpr auto CHARACTER_SPECIES_CHR_UUID = "00000004-467e-413f-9559-419eb1a367a7";
+    constexpr auto ACTION_COUNT_CHR_UUID = "00000005-467e-413f-9559-419eb1a367a7";
+    constexpr auto CHARACTER_COUNT_CHR_UUID = "00000006-467e-413f-9559-419eb1a367a7";
     constexpr auto COMMAND_CHR_UUID = "00000010-467e-413f-9559-419eb1a367a7";
     constexpr auto RESPONSE_CHR_UUID = "00000011-467e-413f-9559-419eb1a367a7";
 
@@ -54,6 +55,7 @@ namespace bp {
 
     class BPCharacteristics {
         NimBLECharacteristic* mode_chr;
+        NimBLECharacteristic* character_id_chr;
         NimBLECharacteristic* character_name_chr;
         NimBLECharacteristic* character_species_chr;
         NimBLECharacteristic* action_count_chr;
@@ -78,7 +80,9 @@ namespace bp {
 
     public:
         void set_character_count(const std::vector<std::string>& names) const;
-        void set_character_info(const std::string& name, const std::string& species, std::size_t action_count) const;
+        void set_character_info(
+            const std::string& id, const std::string& name, const std::string& species, size_t action_count
+        ) const;
         void set_command_handler(CommandHandler command_handler);
 
         friend void init_bluetooth(BluetoothPairRequestCallback);

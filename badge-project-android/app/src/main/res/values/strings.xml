@@ -21,4 +21,6 @@
     <string name="info_loading">Loading...</string>
     <string name="info_failed_to_load">Failed to load!</string>
     <string name="device_connecting">Connecting...</string>
+    <string name="switch_character">Switch Character</string>
+    <string name="character_id">ID: %s</string>
 </resources>

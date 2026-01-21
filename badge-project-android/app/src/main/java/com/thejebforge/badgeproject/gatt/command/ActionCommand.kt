@@ -18,6 +18,7 @@ abstract class ActionCommand(
     commandHandler: GATTCommandHandler,
     protected val handler: Handler
 ) : GATTCommand(gattServer, commandHandler) {
+    open fun timeoutTime(): Long = ACTION_TIMEOUT
     abstract fun payload(): ByteArray
     abstract fun received(data: ByteArray)
     abstract fun failed(reason: ActionResponse<Nothing>)
@@ -27,6 +28,7 @@ abstract class ActionCommand(
     private var operation: Byte = 0
 
     private var dataReceived = false
+    private var retryCount = 0
 
     @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
     override fun runCommand() {
@@ -59,10 +61,15 @@ abstract class ActionCommand(
 
         handler.postDelayed({
             if (!dataReceived) {
-                failed(ActionResponse.TimedOut)
-                continueExecution()
+                if (retryCount < 3) {
+                    retryCount++
+                    runCommand()
+                } else {
+                    failed(ActionResponse.TimedOut)
+                    continueExecution()
+                }
             }
-        }, ACTION_TIMEOUT)
+        }, timeoutTime())
     }
 
     override fun onCharacteristicChanged(

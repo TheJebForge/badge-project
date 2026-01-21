@@ -8,7 +8,7 @@ namespace bp {
         GetAction,
         GetActionDisplayName,
         InvokeAction,
-        GetCharacterName,
+        GetCharacter,
         SwitchCharacter
     };
 
@@ -20,6 +20,7 @@ namespace bp {
     class CharacterFSM {
         bool ready = false;
         bool busy = false;
+        bool in_tick = false;
 
         // Character data
         data::Character character_data;
@@ -72,11 +73,14 @@ namespace bp {
             ~BusyLock();
         };
 
+
+        bool is_data_in_use();
         bool is_free_sl();
         bool is_busy_sl();
         bool is_cooking_sl();
         BusyLock get_busy_sl();
         void wait_until_free_sl();
+        void wait_until_data_unused_sl();
         void wait_until_not_busy_sl();
 
         void play_animation(

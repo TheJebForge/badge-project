@@ -7,7 +7,7 @@ import com.thejebforge.badgeproject.gatt.GATTHelper
 import com.thejebforge.badgeproject.gatt.toStringWithoutNulls
 import com.thejebforge.badgeproject.util.PayloadCreator
 
-class GetCharacterName(
+class GetCharacter(
     gattServer: BluetoothGatt,
     commandHandler: GATTCommandHandler,
     handler: Handler,
@@ -25,8 +25,8 @@ class GetCharacterName(
     }
 }
 
-fun GATTHelper.getCharacterName(index: Int, callback: (ActionResponse<String>) -> Unit) = this.apply {
-    commandHandler.appendCommand(GetCharacterName(
+fun GATTHelper.getCharacter(index: Int, callback: (ActionResponse<String>) -> Unit) = this.apply {
+    commandHandler.appendCommand(GetCharacter(
         gattServer,
         commandHandler,
         handler,

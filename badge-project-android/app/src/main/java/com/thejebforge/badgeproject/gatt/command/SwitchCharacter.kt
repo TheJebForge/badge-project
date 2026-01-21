@@ -13,6 +13,8 @@ class SwitchCharacter(
     private val name: String,
     private val onDone: (Boolean) -> Unit
 ) : ActionCommand(gattServer, commandHandler, handler) {
+    override fun timeoutTime(): Long = 30000L
+
     override fun payload(): ByteArray = PayloadCreator.switchCharacter(name)
 
     override fun received(data: ByteArray) {
