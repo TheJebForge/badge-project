@@ -25,11 +25,17 @@ namespace bp::data {
         int64_t duration_us;
     };
 
+    struct StateTransitionRandom {
+        int64_t duration_start_range;
+        int64_t duration_end_range;
+        uint32_t chance_mod;
+    };
+
     struct StateTransitionClicked {};
 
     struct StateTransition {
         std::string next_state;
-        std::variant<StateTransitionElapsedTime, StateTransitionClicked> trigger;
+        std::variant<StateTransitionElapsedTime, StateTransitionClicked, StateTransitionRandom> trigger;
     };
 
     struct StateImage {
@@ -40,8 +46,8 @@ namespace bp::data {
         bool upscale;
         bool preload;
 
-        bool image_exists(const Character& character) const;
-        std::size_t get_image_size(const Character& character) const;
+        [[nodiscard]] bool image_exists(const Character& character) const;
+        [[nodiscard]] std::size_t get_image_size(const Character& character) const;
         void load_image(const Character& character, std::span<uint8_t> buffer) const;
     };
 
@@ -63,8 +69,8 @@ namespace bp::data {
         bool upscale;
         int64_t duration_us;
 
-        bool image_exists(const Character& character) const;
-        std::size_t get_image_size(const Character& character) const;
+        [[nodiscard]] bool image_exists(const Character& character) const;
+        [[nodiscard]] std::size_t get_image_size(const Character& character) const;
         void load_image(const Character& character, std::span<uint8_t> buffer) const;
     };
 
@@ -78,8 +84,8 @@ namespace bp::data {
         std::vector<SequenceFrame> frames;
         SequenceLoadMode mode;
 
-        bool frame_exists(const Character& character, std::size_t index) const;
-        std::size_t get_frame_size(const Character& character, std::size_t index) const;
+        [[nodiscard]] bool frame_exists(const Character& character, std::size_t index) const;
+        [[nodiscard]] std::size_t get_frame_size(const Character& character, std::size_t index) const;
         void load_frame(const Character& character, std::span<uint8_t> buffer, std::size_t index) const;
     };
 

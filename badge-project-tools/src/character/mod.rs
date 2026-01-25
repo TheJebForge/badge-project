@@ -2,7 +2,7 @@ use std::fs;
 use std::fs::File;
 use std::path::{Path, PathBuf};
 use tar::{Builder, Header};
-use crate::character::repr::{BinaryRepr, Character, StateImage};
+use crate::character::repr::{AnimationFrameSource, BinaryRepr, Character, StateImage};
 use crate::image::encode_image_data;
 
 pub mod repr;
@@ -105,20 +105,36 @@ pub fn process_character(cli: CharacterCli) -> anyhow::Result<()> {
         let anim_path = char_path.join("animations").join(anim_name);
         append_vec(&mut archive, anim_path.join("animation.bin"), &anim.to_bin()?)?;
 
-        for index in 1..=anim.frame_count {
-            let image = fs::read(
-                anim.frame_folder
-                    .join(
-                        format!("{index}.{}", anim.frame_extension)
-                    )
-            )?;
+        match &anim.frames {
+            AnimationFrameSource::Indexed {
+                count, folder, extension
+            } => {
+                for index in 1..=*count {
+                    let image = fs::read(
+                        folder.join(format!("{index}.{}", extension))
+                    )?;
 
-            append_vec(
-                &mut archive,
-                anim_path.join("frames").join(format!("{index}.bin")),
-                &encode_image_data(&image, anim.real_width(), anim.real_height(), false, false)?
-            )?;
+                    append_vec(
+                        &mut archive,
+                        anim_path.join("frames").join(format!("{index}.bin")),
+                        &encode_image_data(&image, anim.real_width(), anim.real_height(), false, false)?
+                    )?;
+                }
+            }
+
+            AnimationFrameSource::List(list) => {
+                for (index, path) in list.iter().enumerate() {
+                    let image = fs::read(path)?;
+
+                    append_vec(
+                        &mut archive,
+                        anim_path.join("frames").join(format!("{index}.bin")),
+                        &encode_image_data(&image, anim.real_width(), anim.real_height(), false, false)?
+                    )?;
+                }
+            }
         }
+
     }
 
     for (action_name, action) in &char.actions {

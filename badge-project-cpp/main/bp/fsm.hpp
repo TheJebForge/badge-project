@@ -32,6 +32,7 @@ namespace bp {
         std::size_t current_sequence_index = -1;
         int64_t next_frame_time = 0;
         std::optional<std::string> queued_state;
+        std::unordered_map<std::string, int64_t> random_durations{};
 
         std::string being_cooked_state;
         bool state_is_cooking = false;
@@ -93,6 +94,9 @@ namespace bp {
         void switch_state_internal(const std::string& state_name);
         void switch_state_unchecked(const std::string& state_name);
 
+        int64_t get_random_duration(const std::string& state_name, const data::StateTransitionRandom& rng_specs, int64_t time_since_transition);
+        void clear_random_duration(const std::string& state_name);
+
         bool cook_if_needed(const std::string& state_name) const;
         void set_progress_visible(bool visibility);
         void set_cooking_progress(int32_t current, int32_t max);
@@ -107,7 +111,7 @@ namespace bp {
         void create_ui();
         bool is_ready_sl();
         void load_character_sl(const std::string& name);
-        data::State get_current_state_sl();
+        data::State& get_current_state_sl();
         void switch_state_sl(const std::string& next_state);
         void switch_to_default_sl();
         bool invoke_action_sl(const std::string& action_id);

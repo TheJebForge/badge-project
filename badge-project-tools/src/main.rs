@@ -7,17 +7,17 @@ include!(concat!(env!("OUT_DIR"), "/bindings.rs"));
 use crate::character::{process_character, CharacterCli};
 use crate::image::{process_image, ImageCli};
 use clap::Parser;
-use crate::tui::{start_tui, TuiCli};
+use crate::gui::{start_gui, GuiCli};
 
 pub mod image;
 pub mod character;
-mod tui;
+mod gui;
 
 #[derive(clap::Subcommand, Debug)]
 enum CliCommand {
     Image(ImageCli),
     Char(CharacterCli),
-    Tui(TuiCli)
+    Gui(GuiCli)
 }
 
 #[derive(clap::Parser, Debug)]
@@ -36,6 +36,6 @@ fn main() -> anyhow::Result<()> {
     match cli.command {
         CliCommand::Image(img) => process_image(img),
         CliCommand::Char(char) => process_character(char),
-        CliCommand::Tui(_) => start_tui(),
+        CliCommand::Gui(_) => start_gui(),
     }
 }

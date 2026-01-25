@@ -4,6 +4,7 @@
 #include <filesystem>
 #include "esp_lcd_panel_ops.h"
 #include "esp_log.h"
+#include "esp_random.h"
 #include "data/character.hpp"
 #include "freertos/FreeRTOS.h"
 #include "esp_timer.h"
@@ -234,7 +235,7 @@ void CharacterFSM::load_character_sl(const std::string& name) {
     }
 }
 
-data::State CharacterFSM::get_current_state_sl() {
+data::State& CharacterFSM::get_current_state_sl() {
     CriticalGuard guard{&spinlock};
     return character_data.states.at(current_state);
 }
@@ -529,6 +530,7 @@ void CharacterFSM::switch_state_internal(const std::string& state_name) {
     last_transition_time = esp_timer_get_time();
     current_sequence_index = -1;
     next_frame_time = 0;
+    random_durations = {};
     mark_dirty();
 }
 
@@ -554,6 +556,28 @@ void CharacterFSM::switch_state_unchecked(const std::string& state_name) {
         set_cooking_progress(0, 100);
         set_progress_visible(true);
     }
+}
+
+int64_t CharacterFSM::get_random_duration(
+    const std::string& state_name,
+    const data::StateTransitionRandom& rng_specs,
+    const int64_t time_since_transition
+) {
+
+    if (!random_durations.contains(state_name)) {
+        if (const auto distance = rng_specs.duration_end_range - rng_specs.duration_start_range + 1; distance <= 0) {
+            random_durations[state_name] = time_since_transition + rng_specs.duration_start_range;
+        } else {
+            const auto random_offset = esp_random() % distance;
+            random_durations[state_name] = time_since_transition + rng_specs.duration_start_range + random_offset;
+        }
+    }
+
+    return random_durations[state_name];
+}
+
+void CharacterFSM::clear_random_duration(const std::string& state_name) {
+    random_durations.erase(state_name);
 }
 
 void CharacterFSM::switch_state_sl(const std::string& next_state) {
@@ -1016,7 +1040,7 @@ void CharacterFSM::tick() {
     const auto time_since_transition = now - last_transition_time;
 
     try {
-        const auto [image, transitions] = get_current_state_sl();
+        auto& [image, transitions] = get_current_state_sl();
 
         if (ui_dirty || (current_sequence_index != -1 && now > next_frame_time)) {
             set_ui_image(image);
@@ -1025,10 +1049,28 @@ void CharacterFSM::tick() {
         update_cooking_progress_if_needed();
         address_queue();
 
-        for (const auto& [next_state, trigger]: transitions) {
-            if (const auto elapsed = std::get_if<data::StateTransitionElapsedTime>(&trigger)) {
-                if (time_since_transition > elapsed->duration_us && !state_is_cooking) {
-                    switch_state_sl(next_state);
+        if (!state_is_cooking) {
+            for (auto& [next_state, trigger]: transitions) {
+                if (const auto elapsed = std::get_if<data::StateTransitionElapsedTime>(&trigger)) {
+                    if (time_since_transition > elapsed->duration_us) {
+                        switch_state_sl(next_state);
+                        break;
+                    }
+                }
+
+                if (const auto random = std::get_if<data::StateTransitionRandom>(&trigger)) {
+                    if (time_since_transition > get_random_duration(next_state, *random, time_since_transition)) {
+                        clear_random_duration(next_state);
+
+                        if (random->chance_mod != 0) {
+                            const auto roll_result = esp_random() % random->chance_mod;
+                            ESP_LOGI(TAG, "Rolling for 1 in %d, got %d", random->chance_mod, roll_result);
+                            if (roll_result != 0) continue;
+                        }
+
+                        switch_state_sl(next_state);
+                        break;
+                    }
                 }
             }
         }

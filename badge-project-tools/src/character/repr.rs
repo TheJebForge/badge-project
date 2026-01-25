@@ -1,9 +1,11 @@
 use std::collections::HashMap;
-use crate::character::util::{any_as_u8_vec, string_to_char_array};
-use crate::{bp_character_action_e_BP_CHARACTER_ACTION_SWITCH_STATE, bp_character_action_file_s, bp_character_action_u, bp_character_animation_file_s, bp_character_animation_mode_e_BP_CHARACTER_ANIMATION_MODE_FROM_RAM, bp_character_animation_mode_e_BP_CHARACTER_ANIMATION_MODE_FROM_SDCARD, bp_character_file_s, bp_character_image_descriptor_s, bp_character_sequence_mode_e_BP_CHARACTER_SEQUENCE_MODE_LOAD_ALL, bp_character_sequence_mode_e_BP_CHARACTER_SEQUENCE_MODE_LOAD_EACH, bp_character_sequence_mode_e_BP_CHARACTER_SEQUENCE_MODE_PRELOAD, bp_character_state_animation_descriptor_s, bp_character_state_file_s, bp_character_state_image_e_BP_CHARACTER_STATE_ANIMATION, bp_character_state_image_e_BP_CHARACTER_STATE_NO_IMAGE, bp_character_state_image_e_BP_CHARACTER_STATE_SEQUENCE, bp_character_state_image_e_BP_CHARACTER_STATE_SINGLE_IMAGE, bp_character_state_image_u, bp_character_state_sequence_descriptor_s, bp_data_FORMAT_VERSION, bp_sequence_frame_file_s, bp_state_transition_file_s, bp_state_trigger_e_BP_STATE_TRIGGER_CLICKED, bp_state_trigger_e_BP_STATE_TRIGGER_ELAPSED_TIME, bp_state_trigger_s, bp_state_trigger_u};
+use crate::character::util::{any_as_u8_vec, string_to_char_array, TuplePick};
+use crate::{bp_character_action_e_BP_CHARACTER_ACTION_SWITCH_STATE, bp_character_action_file_s, bp_character_action_u, bp_character_animation_file_s, bp_character_animation_mode_e_BP_CHARACTER_ANIMATION_MODE_FROM_RAM, bp_character_animation_mode_e_BP_CHARACTER_ANIMATION_MODE_FROM_SDCARD, bp_character_file_s, bp_character_image_descriptor_s, bp_character_sequence_mode_e_BP_CHARACTER_SEQUENCE_MODE_LOAD_ALL, bp_character_sequence_mode_e_BP_CHARACTER_SEQUENCE_MODE_LOAD_EACH, bp_character_sequence_mode_e_BP_CHARACTER_SEQUENCE_MODE_PRELOAD, bp_character_state_animation_descriptor_s, bp_character_state_file_s, bp_character_state_image_e_BP_CHARACTER_STATE_ANIMATION, bp_character_state_image_e_BP_CHARACTER_STATE_NO_IMAGE, bp_character_state_image_e_BP_CHARACTER_STATE_SEQUENCE, bp_character_state_image_e_BP_CHARACTER_STATE_SINGLE_IMAGE, bp_character_state_image_u, bp_character_state_sequence_descriptor_s, bp_data_FORMAT_VERSION, bp_sequence_frame_file_s, bp_state_transition_file_s, bp_state_trigger_e_BP_STATE_TRIGGER_CLICKED, bp_state_trigger_e_BP_STATE_TRIGGER_ELAPSED_TIME, bp_state_trigger_e_BP_STATE_TRIGGER_RANDOM, bp_state_trigger_random_s, bp_state_trigger_s, bp_state_trigger_u};
 use serde::{Deserialize, Serialize};
 use std::ffi::NulError;
 use std::path::PathBuf;
+use either::Either;
+use strum::{Display, EnumIs, EnumIter};
 use crate::image::rgb_to_565;
 
 pub trait BinaryRepr {
@@ -41,6 +43,7 @@ impl Character {
                 ("idle".to_string(), State {
                     image: StateImage::None,
                     transitions: vec![],
+                    node_pos: None,
                 })
             ]),
             animations: Default::default(),
@@ -49,15 +52,18 @@ impl Character {
     }
 }
 
-#[derive(Deserialize, Serialize, Clone, Debug)]
+#[derive(Deserialize, Serialize, Clone, Debug, Default)]
 pub struct State {
     pub image: StateImage,
     #[serde(default)]
-    pub transitions: Vec<StateTransition>
+    pub transitions: Vec<StateTransition>,
+    #[serde(default)]
+    pub node_pos: Option<(f32, f32)>
 }
 
-#[derive(Deserialize, Serialize, Clone, Debug)]
+#[derive(Deserialize, Serialize, Clone, Debug, Default)]
 pub enum StateImage {
+    #[default]
     None,
     Single {
         name: String,
@@ -95,7 +101,45 @@ pub enum StateTransitionTrigger {
     ElapsedTime {
         duration: i64
     },
-    Clicked
+    Clicked,
+    Random {
+        #[serde(with = "either::serde_untagged")]
+        duration_range: Either<(i64, i64), i64>,
+        chance: u32
+    }
+}
+
+impl Default for StateTransitionTrigger {
+    fn default() -> Self {
+        Self::ElapsedTime {
+            duration: 1000000
+        }
+    }
+}
+
+#[derive(Deserialize, Serialize, Clone, Debug, EnumIs)]
+pub enum AnimationFrameSource {
+    Indexed {
+        folder: PathBuf,
+        extension: String,
+        count: u32
+    },
+    List(Vec<PathBuf>)
+}
+
+impl Default for AnimationFrameSource {
+    fn default() -> Self {
+        Self::List(vec![])
+    }
+}
+
+impl AnimationFrameSource {
+    pub fn count(&self) -> u32 {
+        match self {
+            &AnimationFrameSource::Indexed { count, .. } => count,
+            AnimationFrameSource::List(list) => list.len() as u32
+        }
+    }
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
@@ -104,33 +148,46 @@ pub struct Animation {
     pub y: u16,
     pub width: u32,
     pub height: u32,
-    pub frame_folder: PathBuf,
-    pub frame_extension: String,
-    pub frame_count: u32,
+    pub frames: AnimationFrameSource,
     pub fps: f64,
     #[serde(default)]
     pub clear_screen: bool,
     #[serde(default)]
     pub background_color: (u8, u8, u8),
-    #[serde(default = "default_animation_mode")]
+    #[serde(default)]
     pub mode: AnimationMode,
     #[serde(default)]
     pub upscale: bool
 }
 
-fn default_animation_mode() -> AnimationMode {
-    AnimationMode::FromRAM
+impl Default for Animation {
+    fn default() -> Self {
+        Self {
+            x: 0,
+            y: 160,
+            width: 320,
+            height: 320,
+            frames: Default::default(),
+            fps: 10.0,
+            clear_screen: false,
+            background_color: (0, 0, 0),
+            mode: Default::default(),
+            upscale: false,
+        }
+    }
 }
 
-#[derive(Deserialize, Serialize, Copy, Clone, Debug)]
+#[derive(Deserialize, Serialize, Copy, Clone, Debug, Default, EnumIter, Display, PartialEq, Eq)]
 pub enum AnimationMode {
+    #[default]
     FromSDCard,
     FromRAM
 }
 
-#[derive(Deserialize, Serialize, Copy, Clone, Debug)]
+#[derive(Deserialize, Serialize, Copy, Clone, Debug, Default, EnumIter, Display, PartialEq, Eq)]
 pub enum SequenceMode {
     LoadAll,
+    #[default]
     LoadEach,
     Preload
 }
@@ -148,7 +205,7 @@ pub struct SequenceFrame {
     pub duration: i64
 }
 
-#[derive(Deserialize, Serialize, Clone, Debug)]
+#[derive(Deserialize, Serialize, Clone, Debug, Default)]
 pub struct Action {
     pub display: String,
     pub ty: ActionType
@@ -157,6 +214,12 @@ pub struct Action {
 #[derive(Deserialize, Serialize, Clone, Debug)]
 pub enum ActionType {
     SwitchState(String)
+}
+
+impl Default for ActionType {
+    fn default() -> Self {
+        Self::SwitchState("idle".to_string())
+    }
 }
 
 impl BinaryRepr for Character {
@@ -214,7 +277,7 @@ impl BinaryRepr for Animation {
             y: self.y,
             width: self.real_width(),
             height: self.real_height(),
-            frame_count: self.frame_count,
+            frame_count: self.frames.count(),
             interval_us: (1_000_000_f64 / self.fps).floor() as i64,
             clear_screen: self.clear_screen,
             background_color: rgb_to_565(bg.0, bg.1, bg.2).to_be(),
@@ -250,6 +313,27 @@ impl BinaryRepr for StateTransition {
                             no_data: 0
                         },
                     },
+                }
+            },
+            StateTransitionTrigger::Random { duration_range, chance } => {
+                bp_state_transition_file_s {
+                    trigger: bp_state_trigger_s {
+                        type_: bp_state_trigger_e_BP_STATE_TRIGGER_RANDOM,
+                        data: bp_state_trigger_u {
+                            random_s: duration_range.either(
+                                |tuple| bp_state_trigger_random_s {
+                                    duration_start_range: tuple.pick_min(),
+                                    duration_end_range: tuple.pick_max(),
+                                    chance_mod: *chance,
+                                },
+                                |num| bp_state_trigger_random_s {
+                                    duration_start_range: num,
+                                    duration_end_range: num,
+                                    chance_mod: *chance
+                                }
+                            )
+                        }
+                    }
                 }
             }
         };

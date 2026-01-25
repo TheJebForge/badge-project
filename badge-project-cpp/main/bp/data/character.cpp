@@ -6,6 +6,7 @@
 #include "format.hpp"
 
 #include "esp_log.h"
+#include "esp_random.h"
 #include "freertos/FreeRTOS.h"
 
 namespace fs = std::filesystem;
@@ -295,6 +296,13 @@ namespace bp::data {
                                     break;
                                 case BP_STATE_TRIGGER_CLICKED:
                                     transition.trigger = StateTransitionClicked{};
+                                    break;
+                                case BP_STATE_TRIGGER_RANDOM:
+                                    transition.trigger = StateTransitionRandom {
+                                        .duration_start_range = transition_struct.trigger.data.random_s.duration_start_range,
+                                        .duration_end_range = transition_struct.trigger.data.random_s.duration_end_range,
+                                        .chance_mod = transition_struct.trigger.data.random_s.chance_mod
+                                    };
                                     break;
                             }
 

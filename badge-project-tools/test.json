@@ -75,9 +75,13 @@
       "y": 160,
       "width": 320,
       "height": 320,
-      "frame_folder": "frames",
-      "frame_extension": "png",
-      "frame_count": 2,
+      "frames": {
+        "Indexed": {
+          "folder": "frames",
+          "extension": "png",
+          "count": 2
+        }
+      },
       "fps": 0.5,
       "clear_screen": false,
       "background_color": [

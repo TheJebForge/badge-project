@@ -23,7 +23,16 @@ struct bp_character_file_s {
 /// Enumeration of different possible state transition triggers
 enum bp_state_trigger_e {
     BP_STATE_TRIGGER_ELAPSED_TIME,
-    BP_STATE_TRIGGER_CLICKED
+    BP_STATE_TRIGGER_CLICKED,
+    BP_STATE_TRIGGER_RANDOM
+};
+
+/// Parameters for random transition trigger
+struct bp_state_trigger_random_s {
+    int64_t duration_start_range;
+    int64_t duration_end_range;
+    /// Specifies right range of random, e.g. if set to 10, random will try to get 0 from 0-9 random. 0 to always trip
+    uint32_t chance_mod;
 };
 
 /// Attached data for state transition triggers
@@ -31,6 +40,7 @@ union bp_state_trigger_u {
     char no_data;
     /// Time that the state has to be active for until it will trigger a state transition
     int64_t state_duration_us;
+    bp_state_trigger_random_s random_s;
 };
 
 /// Describes what has to happen for state transition to be triggered
