@@ -1,3 +1,21 @@
 [workspace]
 resolver = "3"
-members = ["badge-project-tools"]
+members = ["badge-project-tools", "egui-snarl"]
+
+[workspace.package]
+rust-version = "1.88"
+edition = "2024"
+license = "MIT OR Apache-2.0"
+
+[workspace.dependencies]
+egui = { version = "0.33" }
+eframe = { version = "0.33" }
+egui_extras = { version = "0.33" }
+syn = { version = "2" }
+serde = { version = "1" }
+serde_json = { version = "1" }
+
+egui-probe = { version = "0.10.0" }
+egui-scale = { version = "0.3.0" }
+wasm-bindgen-futures = "0.4"
+web-sys = "0.3.81"

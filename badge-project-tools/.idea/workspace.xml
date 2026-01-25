@@ -8,95 +8,28 @@
       <package file="$PROJECT_DIR$/badge-project-tools">
         <feature name="default" enabled="true" />
       </package>
+      <package file="$PROJECT_DIR$/egui-snarl">
+        <feature name="default" enabled="true" />
+      </package>
     </cargoProject>
   </component>
   <component name="ChangeListManager">
     <list default="true" id="a1adc736-dd13-4dc0-93b4-2fe3353375b1" name="Changes" comment="">
-      <change afterPath="$PROJECT_DIR$/badge-project-tools/.gitignore" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/badge-project-tools/Cargo.lock" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/badge-project-tools/Cargo.toml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/badge-project-tools/build.rs" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/badge-project-tools/characters/test/animations/booped/animation.bin" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/badge-project-tools/characters/test/animations/booped/frames/1.bin" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/badge-project-tools/characters/test/animations/booped/frames/2.bin" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/badge-project-tools/characters/test/character.bin" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/badge-project-tools/characters/test/images/idle.bin" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/badge-project-tools/characters/test/images/idle_blink.bin" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/badge-project-tools/characters/test/states/booped/state.bin" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/badge-project-tools/characters/test/states/idle/state.bin" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/badge-project-tools/characters/test/states/idle/transitions/booped/transition.bin" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/badge-project-tools/characters/test/states/idle/transitions/idle_blink/transition.bin" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/badge-project-tools/characters/test/states/idle_blink/state.bin" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/badge-project-tools/characters/test/states/idle_blink/transitions/booped/transition.bin" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/badge-project-tools/characters/test/states/idle_blink/transitions/idle/transition.bin" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/badge-project-tools/frames/1.png" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/badge-project-tools/frames/2.png" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/badge-project-tools/pic1.png" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/badge-project-tools/pic2.png" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/badge-project-tools/pic3.png" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/badge-project-tools/src/character/mod.rs" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/badge-project-tools/src/character/repr.rs" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/badge-project-tools/src/character/util.rs" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/badge-project-tools/src/gui/app/editor/intermediate.rs" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/badge-project-tools/src/gui/app/editor/mod.rs" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/badge-project-tools/src/gui/app/editor/nodes/custom_widget.rs" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/badge-project-tools/src/gui/app/editor/nodes/mod.rs" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/badge-project-tools/src/gui/app/editor/resources.rs" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/badge-project-tools/src/gui/app/mod.rs" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/badge-project-tools/src/gui/app/shared.rs" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/badge-project-tools/src/gui/app/start.rs" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/badge-project-tools/src/gui/app/util.rs" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/badge-project-tools/src/gui/mod.rs" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/badge-project-tools/src/image.rs" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/badge-project-tools/src/main.rs" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/badge-project-tools/test.bin" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/badge-project-tools/test.json" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/badge-project-tools/test.tar" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/../badge-project-cpp/main/bp/data/character.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/../badge-project-cpp/main/bp/data/character.cpp" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/../badge-project-cpp/main/bp/data/character.hpp" beforeDir="false" afterPath="$PROJECT_DIR$/../badge-project-cpp/main/bp/data/character.hpp" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/../badge-project-cpp/main/bp/data/format.hpp" beforeDir="false" afterPath="$PROJECT_DIR$/../badge-project-cpp/main/bp/data/format.hpp" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/../badge-project-cpp/main/bp/fsm.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/../badge-project-cpp/main/bp/fsm.cpp" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/../badge-project-cpp/main/bp/fsm.hpp" beforeDir="false" afterPath="$PROJECT_DIR$/../badge-project-cpp/main/bp/fsm.hpp" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/../badge-project-cpp/sdkconfig" beforeDir="false" afterPath="$PROJECT_DIR$/../badge-project-cpp/sdkconfig" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/../badge-project-cpp/sdkconfig.old" beforeDir="false" afterPath="$PROJECT_DIR$/../badge-project-cpp/sdkconfig.old" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.gitignore" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/.gitignore" beforeDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/badge-project-tools.iml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/badge-project-tools.iml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/vcs.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/vcs.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/Cargo.lock" beforeDir="false" afterPath="$PROJECT_DIR$/Cargo.lock" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/Cargo.toml" beforeDir="false" afterPath="$PROJECT_DIR$/Cargo.toml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/build.rs" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/characters/test/animations/booped/animation.bin" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/characters/test/animations/booped/frames/1.bin" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/characters/test/animations/booped/frames/2.bin" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/characters/test/character.bin" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/characters/test/images/idle.bin" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/characters/test/images/idle_blink.bin" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/characters/test/states/booped/state.bin" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/characters/test/states/idle/state.bin" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/characters/test/states/idle/transitions/booped/transition.bin" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/characters/test/states/idle/transitions/idle_blink/transition.bin" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/characters/test/states/idle_blink/state.bin" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/characters/test/states/idle_blink/transitions/booped/transition.bin" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/characters/test/states/idle_blink/transitions/idle/transition.bin" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/frames/1.png" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/frames/2.png" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/pic1.png" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/pic2.png" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/pic3.png" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/character/mod.rs" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/character/repr.rs" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/character/util.rs" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/image.rs" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/main.rs" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/tui/mod.rs" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/tui/screens/character_screen.rs" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/tui/screens/file_selector.rs" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/tui/screens/mod.rs" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/tui/util.rs" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/test.bin" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/test.json" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/test.tar" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/badge-project-tools/Cargo.toml" beforeDir="false" afterPath="$PROJECT_DIR$/badge-project-tools/Cargo.toml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/egui-snarl/.github/FUNDING.yml" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/egui-snarl/.github/dependabot.yml" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/egui-snarl/.github/workflows/msrv.yml" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/egui-snarl/.github/workflows/publish.yml" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/egui-snarl/.github/workflows/static.yml" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/egui-snarl/Cargo.toml" beforeDir="false" afterPath="$PROJECT_DIR$/egui-snarl/Cargo.toml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/egui-snarl/demo/Cargo.toml" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/egui-snarl/demo/index.html" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/egui-snarl/examples/demo.rs" beforeDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -110,10 +43,10 @@
   <component name="MacroExpansionManager">
     <option name="directoryName" value="BDHxOISa" />
   </component>
-  <component name="ProjectColorInfo"><![CDATA[{
-  "customColor": "",
-  "associatedIndex": 7
-}]]></component>
+  <component name="ProjectColorInfo">{
+  &quot;customColor&quot;: &quot;&quot;,
+  &quot;associatedIndex&quot;: 7
+}</component>
   <component name="ProjectId" id="38laZctnJ3Wr1Z5bPKRrNjUm7RY" />
   <component name="ProjectViewState">
     <option name="hideEmptyMiddlePackages" value="true" />
@@ -126,7 +59,13 @@
     "RunOnceActivity.rust.reset.selective.auto.import": "true",
     "RunOnceActivity.typescript.service.memoryLimit.init": "true",
     "git-widget-placeholder": "main",
+    "node.js.detected.package.eslint": "true",
+    "node.js.detected.package.tslint": "true",
+    "node.js.selected.package.eslint": "(autodetect)",
+    "node.js.selected.package.tslint": "(autodetect)",
+    "nodejs_package_manager_path": "npm",
     "org.rust.cargo.project.model.PROJECT_DISCOVERY": "true",
+    "org.rust.cargo.project.model.impl.CargoExternalSystemProjectAware.subscribe.first.balloon": "",
     "org.rust.first.attach.projects": "true",
     "settings.editor.selected.configurable": "preferences.lookFeel",
     "vue.rearranger.settings.migration": "true"
@@ -180,6 +119,7 @@
       <option name="presentableId" value="Default" />
       <updated>1769376668737</updated>
       <workItem from="1769376671206" duration="263000" />
+      <workItem from="1769377264246" duration="487000" />
     </task>
     <servers />
   </component>
