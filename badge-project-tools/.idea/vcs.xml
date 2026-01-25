@@ -3,6 +3,5 @@
   <component name="VcsDirectoryMappings">
     <mapping directory="$PROJECT_DIR$/.." vcs="Git" />
     <mapping directory="$PROJECT_DIR$/../badge-project-cpp/components/esp-nimble-cpp" vcs="Git" />
-    <mapping directory="$PROJECT_DIR$/egui-snarl" vcs="Git" />
   </component>
 </project>

@@ -1,14 +1,12 @@
-mod custom_widget;
-
-use std::collections::HashMap;
-use eframe::emath::Rect;
-use egui::{vec2, CentralPanel, Color32, Frame, Id, Painter, Sense, Stroke, Style, Ui};
-use egui_snarl::{InPin, InPinId, NodeId, OutPin, OutPinId, Snarl};
-use egui_snarl::ui::{BackgroundPattern, Grid, PinInfo, PinPlacement, SnarlPin, SnarlStyle, SnarlViewer, SnarlWidget, WireLayer};
-use strum::EnumIs;
-use crate::gui::app::editor::CharacterEditor;
 use crate::gui::app::editor::intermediate::{SharedInterState, SharedInterStateTransition};
+use crate::gui::app::editor::CharacterEditor;
 use crate::gui::app::shared::SharedString;
+use eframe::emath::Rect;
+use egui::{vec2, CentralPanel, Color32, Frame, Id, Sense, Stroke, Ui};
+use egui_snarl::ui::{BackgroundPattern, Grid, PinInfo, PinPlacement, SnarlPin, SnarlStyle, SnarlViewer, SnarlWidget, WireLayer};
+use egui_snarl::{InPin, InPinId, NodeId, OutPin, OutPinId, Snarl};
+use std::collections::HashMap;
+use strum::EnumIs;
 
 pub type StateNode = (SharedString, SharedInterState);
 
@@ -134,13 +132,21 @@ impl SnarlViewer<StateNode> for StateViewer {
     fn final_node_rect(&mut self, node: NodeId, rect: Rect, ui: &mut Ui, snarl: &mut Snarl<StateNode>) {
         let resp = ui.allocate_rect(rect, Sense::CLICK);
 
-        if resp.secondary_clicked() {
+        if resp.clicked() {
             println!("wah {}", snarl[node].0)
         }
     }
 
+    fn wire_select(&mut self, from: &OutPin, to: &InPin, snarl: &mut Snarl<StateNode>) {
+        println!("clicked");
+    }
+
     fn disconnect(&mut self, from: &OutPin, to: &InPin, snarl: &mut Snarl<StateNode>) {
         println!("right click");
+    }
+
+    fn background_click(&mut self, rect: Rect, snarl: &mut Snarl<StateNode>) {
+        println!("background was clicked");
     }
 }
 
