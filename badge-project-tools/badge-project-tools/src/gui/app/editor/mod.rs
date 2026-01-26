@@ -1,27 +1,35 @@
 mod intermediate;
 mod resources;
 mod nodes;
+mod validation;
 
 use crate::character::repr::{Animation, Character, State};
 use crate::character::util::AsRichText;
 use crate::gui::app::editor::intermediate::{find_images, InterAction, InterState, LoadedImage, SharedInterState};
+use crate::gui::app::editor::nodes::{snarl_from_states, snarl_style, ViewerSelection};
 use crate::gui::app::shared::SharedString;
 use crate::gui::app::start::StartScreen;
-use crate::gui::app::util::SPACING;
 use crate::gui::app::{util, BoxedGuiPage, GuiPage, PageResponse};
-use egui::{vec2, Button, CentralPanel, ColorImage, Image, InnerResponse, ScrollArea, SidePanel, TextureOptions, TopBottomPanel, Ui, WidgetText};
-use std::path::{Path, PathBuf};
-use std::{env, fs};
-use std::cell::RefCell;
-use std::rc::Rc;
-use egui_snarl::Snarl;
+use anyhow::anyhow;
+use egui::containers::menu::MenuButton;
+use egui::{vec2, Button, CentralPanel, Color32, ColorImage, Image, InnerResponse, Key, Sense, TextureOptions, TopBottomPanel, Ui, WidgetText};
 use egui_snarl::ui::SnarlStyle;
+use egui_snarl::Snarl;
+use std::cell::RefCell;
+use std::path::{Path, PathBuf};
+use std::rc::Rc;
+use std::{env, fs};
+use std::fmt::Display;
+use std::time::Instant;
 use strum::{Display, EnumIter, IntoEnumIterator};
-use crate::gui::app::editor::nodes::{snarl_from_states, snarl_style, StateViewer};
+use crate::gui::app::editor::validation::ValidationError;
+use crate::gui::app::util::ChangeTracker;
 
 pub struct CharacterEditor {
     tab: EditorTab,
     location: PathBuf,
+    file_path: Option<PathBuf>,
+    last_save: Option<Instant>,
     id: String,
     name: String,
     species: String,
@@ -32,7 +40,9 @@ pub struct CharacterEditor {
     states: Vec<(SharedString, SharedInterState)>,
     state_graph: Snarl<(SharedString, SharedInterState)>,
     graph_style: SnarlStyle,
-    graph_viewer: StateViewer,
+    graph_selection: ViewerSelection,
+    tracker: ChangeTracker,
+    validation_errors: Vec<ValidationError>
 }
 
 #[derive(Copy, Clone, EnumIter, Default, Display, Eq, PartialEq)]
@@ -43,7 +53,7 @@ enum EditorTab {
 }
 
 impl CharacterEditor {
-    pub fn from_character(mut char: Character, location: PathBuf) -> CharacterEditor {
+    pub fn from_character(mut char: Character, location: PathBuf, original: Option<PathBuf>) -> CharacterEditor {
         let images = find_images(&char.states, &location);
 
         let animations = char.animations.into_iter()
@@ -74,9 +84,11 @@ impl CharacterEditor {
             .filter_map(|(k, v)| Some((k, InterAction::from_action(v, &states)?)))
             .collect();
 
-        Self {
+        let mut state = Self {
             tab: EditorTab::default(),
             location,
+            file_path: original,
+            last_save: None,
             id: char.id,
             name: char.name,
             species: char.species,
@@ -88,12 +100,18 @@ impl CharacterEditor {
             state_graph: snarl_from_states(&states),
             states,
             graph_style: snarl_style(),
-            graph_viewer: StateViewer::default()
-        }
+            graph_selection: ViewerSelection::default(),
+            tracker: Default::default(),
+            validation_errors: vec![],
+        };
+
+        state.validation_errors = state.validate_state();
+
+        state
     }
 
     pub fn new_file(id: &str) -> BoxedGuiPage {
-        Box::new(Self::from_character(Character::from_id(id), env::current_dir().unwrap()))
+        Box::new(Self::from_character(Character::from_id(id), env::current_dir().unwrap(), None))
     }
 
     pub fn open_file(path: impl AsRef<Path>) -> anyhow::Result<BoxedGuiPage> {
@@ -105,10 +123,80 @@ impl CharacterEditor {
         let location = if let Some(parent) = path.parent() {
             parent.to_path_buf()
         } else {
-            path
+            path.clone()
         };
 
-        Ok(Box::new(Self::from_character(character, location)))
+        Ok(Box::new(Self::from_character(character, location, Some(path))))
+    }
+
+    pub fn as_repr(&self) -> Character {
+        Character {
+            id: self.id.clone(),
+            name: self.name.clone(),
+            species: self.species.clone(),
+            default_state: self.default_state.to_string(),
+            states: self.states.iter()
+                .filter_map(|(k, v)| Some(
+                    (k.to_string(), v.borrow().clone().into_state(&self.images)?)
+                ))
+                .collect(),
+            animations: self.animations.iter()
+                .map(|(k, v)| (k.to_string(), v.clone()))
+                .collect(),
+            actions: self.actions.iter()
+                .filter_map(|(k, v)| Some((k.to_string(), v.clone().into_action()?)))
+                .collect(),
+        }
+    }
+
+    pub fn save_file(&mut self, save_over_original: bool) -> anyhow::Result<()> {
+        let pick_file = || {
+            let Some(picked_file) = rfd::FileDialog::new()
+                .set_title("Save character JSON file")
+                .add_filter("Character File", &["json"])
+                .set_directory(&self.location)
+                .save_file()
+            else {
+                return Err(anyhow!("Cancelled!"));
+            };
+
+            Ok(picked_file)
+        };
+
+        let path = if !save_over_original {
+            pick_file()?
+        } else {
+            if let Some(original) = &self.file_path {
+                original.clone()
+            } else {
+                pick_file()?
+            }
+        };
+
+        self.file_path = Some(path.clone());
+
+        let char = self.as_repr();
+        let serialized = serde_json::to_string(&char)?;
+        fs::write(path, serialized)?;
+
+        self.tracker.mark_saved();
+        self.last_save = Some(Instant::now());
+
+        Ok(())
+    }
+
+    pub fn save(&mut self) {
+        match self.save_file(true) {
+            Ok(_) => {}
+            Err(err) => println!("Error while saving: {err}")
+        };
+    }
+
+    pub fn save_as(&mut self) {
+        match self.save_file(false) {
+            Ok(_) => {}
+            Err(err) => println!("Error while saving: {err}")
+        };
     }
 }
 
@@ -116,12 +204,19 @@ pub const IMAGE_EXTENSIONS: &[&'static str] = &["png", "jpg", "jpeg", "bmp", "tg
 
 const IMAGE_SIZE: f32 = 200.0;
 
-pub fn inline_image_picker(ui: &mut Ui, label: impl Into<WidgetText>, value: &mut LoadedImage, location: impl AsRef<Path>, width: f32) -> InnerResponse<()> {
+pub fn inline_image_picker(
+    ui: &mut Ui,
+    label: impl Into<WidgetText>,
+    value: &mut LoadedImage,
+    location: impl AsRef<Path>,
+    width: f32,
+    tracker: &mut ChangeTracker
+) -> InnerResponse<()> {
     let location = location.as_ref().to_path_buf();
 
     let content = value.path.to_string_lossy().to_string();
 
-    let try_pick_file = |value: &mut LoadedImage| {
+    let try_pick_file = |value: &mut LoadedImage, tracker: &mut ChangeTracker| {
         let Some(picked_file) = rfd::FileDialog::new()
             .set_title("Pick image file")
             .add_filter("Image", IMAGE_EXTENSIONS)
@@ -147,6 +242,8 @@ pub fn inline_image_picker(ui: &mut Ui, label: impl Into<WidgetText>, value: &mu
         value.image = image;
         value.path = stripped;
         value.handle = None;
+
+        tracker.mark_change()
     };
 
     let get_handle = |ui: &mut Ui, value: &mut LoadedImage| {
@@ -170,7 +267,7 @@ pub fn inline_image_picker(ui: &mut Ui, label: impl Into<WidgetText>, value: &mu
         ui.horizontal(|ui| {
             util::inline_style_label(ui, label, width);
             if ui.button("Pick Image").clicked() {
-                try_pick_file(value)
+                try_pick_file(value, tracker)
             }
             util::disabled_text_edit(ui, content, util::BUTTON_WIDTH);
         });
@@ -191,24 +288,92 @@ pub fn inline_image_picker(ui: &mut Ui, label: impl Into<WidgetText>, value: &mu
     })
 }
 
+pub fn inline_validation_error(
+    ui: &mut Ui,
+    validations: &Vec<ValidationError>,
+    error_message: impl Display,
+    condition: impl Fn(&ValidationError) -> bool,
+    width: f32
+) {
+    for error in validations {
+        if condition(error) {
+            ui.horizontal(|ui| {
+                ui.add_space(width + ui.style().spacing.item_spacing.x);
+                ui.label(error_message.rich().color(Color32::RED))
+            });
+            return;
+        }
+    }
+}
+
 impl GuiPage for CharacterEditor {
     fn show(&mut self, ui: &mut Ui) -> PageResponse {
+        if ui.input(|k| k.modifiers.ctrl && k.key_pressed(Key::S)) {
+            self.save();
+        }
+
+        if ui.input(|k| k.modifiers.ctrl && k.modifiers.shift && k.key_pressed(Key::S)) {
+            self.save_as();
+        }
+
         let button_resp = TopBottomPanel::top("editor.top")
             .show(ui.ctx(), |ui| {
                 ui.horizontal_centered(|ui| {
-                    if ui.button("<-".rich().size(15.0)).clicked() {
-                        return Some(PageResponse::SwitchPage(StartScreen::new()))
+                    if let Some(resp) = MenuButton::new("File")
+                        .ui(ui, |ui| {
+                            ui.allocate_exact_size(vec2(100.0, 0.0), Sense::empty());
+
+                            if ui.button("Save (Ctrl + S)".rich()).clicked() {
+                                self.save()
+                            }
+
+                            if ui.button("Save As (Ctrl + Shift + S)").clicked() {
+                                self.save_as()
+                            }
+
+                            ui.separator();
+
+                            if ui.button("Exit to Start").clicked() {
+                                return Some(PageResponse::SwitchPage(StartScreen::new()))
+                            }
+
+                            None
+                        }).1 {
+                        if let Some(resp) = resp.inner {
+                            return Some(resp)
+                        }
                     }
 
-                    ui.add_space(SPACING * 2.0);
+                    ui.separator();
 
                     for variant in EditorTab::iter() {
                         if ui.add(
-                            Button::new(variant.rich().size(15.0))
+                            Button::new(variant.rich())
                                 .selected(variant == self.tab)
                         ).clicked() {
                             self.tab = variant
                         }
+                    }
+
+                    ui.separator();
+
+                    if self.tracker.unsaved() {
+                        ui.label("Unsaved changes!");
+                    }
+
+                    ui.label(if let Some(last_save) = &self.last_save {
+                        let diff = Instant::now() - *last_save;
+
+                        let fmt = timeago::Formatter::new();
+
+                        format!("Last saved: {}", fmt.convert(diff))
+                    } else {
+                        "Never saved".to_string()
+                    }.rich().color(Color32::GRAY));
+
+                    if let Some(error) = self.validation_errors.first() {
+                        ui.separator();
+                        ui.label(error.rich().color(Color32::RED));
                     }
 
                     None
@@ -231,6 +396,11 @@ impl GuiPage for CharacterEditor {
                     }
                 }
             });
+
+        if self.tracker.changed() {
+            self.validation_errors = self.validate_state();
+            self.tracker.mark_clean();
+        }
 
         PageResponse::Nothing
     }

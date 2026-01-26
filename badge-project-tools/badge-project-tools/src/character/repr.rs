@@ -96,7 +96,7 @@ pub struct StateTransition {
     pub trigger: StateTransitionTrigger
 }
 
-#[derive(Deserialize, Serialize, Clone, Debug)]
+#[derive(Deserialize, Serialize, Clone, Debug, Display, EnumIs)]
 pub enum StateTransitionTrigger {
     ElapsedTime {
         duration: i64

@@ -1,14 +1,13 @@
-use std::cell::RefCell;
-use std::collections::HashMap;
-use std::os::linux::raw::stat;
-use std::path::{Path, PathBuf};
-use std::rc::Rc;
-use egui::{pos2, Pos2, TextureHandle};
-use image::DynamicImage;
-use strum::{Display, EnumIs};
-use crate::character::repr::{Action, ActionType, Animation, SequenceMode, State, StateImage, StateTransition, StateTransitionTrigger};
+use crate::character::repr::{Action, ActionType, Animation, SequenceFrame, SequenceMode, State, StateImage, StateTransition, StateTransitionTrigger};
 use crate::gui::app::shared::{MutableStringScope, SharedString};
 use crate::gui::app::util::load_image_or_black;
+use egui::{pos2, Pos2, TextureHandle};
+use image::DynamicImage;
+use std::cell::RefCell;
+use std::collections::HashMap;
+use std::path::{Path, PathBuf};
+use std::rc::Rc;
+use strum::{Display, EnumIs};
 
 #[derive(Clone, Debug, Default)]
 pub struct InterAction {
@@ -36,13 +35,23 @@ impl InterAction {
             ty
         })
     }
+
+    pub fn into_action(self) -> Option<Action> {
+        Some(Action {
+            display: self.display,
+            ty: match self.ty {
+                InterActionType::None => return None,
+                InterActionType::SwitchState(state) => ActionType::SwitchState(state.to_string())
+            },
+        })
+    }
 }
 
 #[derive(Clone, Debug, Default)]
 pub struct InterState {
     pub image: InterStateImage,
     pub transitions: Vec<SharedInterStateTransition>,
-    pub initial_node_pos: Pos2
+    pub node_pos: Pos2
 }
 
 pub type SharedInterState = Rc<RefCell<InterState>>;
@@ -107,7 +116,7 @@ impl InterState {
             .filter_map(|transition| {
                 Some(Rc::new(RefCell::new(InterStateTransition {
                     to_state: names.iter().find(|k| k.str_eq(&transition.to_state))?.clone(),
-                    trigger: Default::default(),
+                    trigger: transition.trigger,
                 })))
             })
             .collect();
@@ -121,12 +130,61 @@ impl InterState {
         Some(InterState {
             image,
             transitions,
-            initial_node_pos: node_pos
+            node_pos: node_pos
+        })
+    }
+
+    pub fn into_state(self, images: &Vec<(SharedString, LoadedImage)>) -> Option<State> {
+        Some(State {
+            image: match self.image {
+                InterStateImage::None => StateImage::None,
+                InterStateImage::Single {
+                    image, width, height, alpha, upscale, preload
+                } => StateImage::Single {
+                    name: image.to_string(),
+                    path: images.iter().find(|(k, _)| k == &image)?.1.path.clone(),
+                    width,
+                    height,
+                    alpha,
+                    upscale,
+                    preload,
+                },
+                InterStateImage::Animation {
+                    animation, next_state, loop_count, preload
+                } => StateImage::Animation {
+                    name: animation.to_string(),
+                    next_state: next_state.to_string(),
+                    loop_count,
+                    preload,
+                },
+                InterStateImage::Sequence {
+                    frames, mode
+                } => StateImage::Sequence {
+                    frames: frames.into_iter()
+                        .filter_map(|e| {
+                            Some(SequenceFrame {
+                                name: e.image.to_string(),
+                                path: images.iter().find(|(k, _)| k == &e.image)?.1.path.clone(),
+                                width: e.width,
+                                height: e.height,
+                                alpha: e.alpha,
+                                upscale: e.upscale,
+                                duration: e.duration,
+                            })
+                        })
+                        .collect(),
+                    mode,
+                }
+            },
+            transitions: self.transitions.into_iter()
+                .map(|t| t.borrow().clone().into())
+                .collect(),
+            node_pos: Some(self.node_pos.into()),
         })
     }
 }
 
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, Display, EnumIs)]
 pub enum InterStateImage {
     #[default]
     None,
@@ -152,12 +210,25 @@ pub enum InterStateImage {
 
 #[derive(Clone, Debug)]
 pub struct InterSequenceFrame {
-    image: SharedString,
-    width: u32,
-    height: u32,
-    alpha: bool,
-    upscale: bool,
-    duration: i64
+    pub image: SharedString,
+    pub width: u32,
+    pub height: u32,
+    pub alpha: bool,
+    pub upscale: bool,
+    pub duration: i64
+}
+
+impl Default for InterSequenceFrame {
+    fn default() -> Self {
+        Self {
+            image: SharedString::from("None"),
+            width: 320,
+            height: 320,
+            alpha: false,
+            upscale: false,
+            duration: 0,
+        }
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -167,6 +238,15 @@ pub struct InterStateTransition {
 }
 
 pub type SharedInterStateTransition = Rc<RefCell<InterStateTransition>>;
+
+impl From<InterStateTransition> for StateTransition {
+    fn from(value: InterStateTransition) -> Self {
+        Self {
+            to_state: value.to_state.to_string(),
+            trigger: value.trigger,
+        }
+    }
+}
 
 #[derive(Clone, Default)]
 pub struct LoadedImage {

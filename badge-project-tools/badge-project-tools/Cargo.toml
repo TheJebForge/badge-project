@@ -9,7 +9,6 @@ serde = { workspace = true, features = ["derive"] }
 serde_json = "1.0.149"
 anyhow = { version = "1.0.100" }
 tar = "0.4.44"
-derive_setters = "0.1.8"
 either = { version = "1.15.0", features = ["serde"] }
 
 egui.workspace = true
@@ -27,6 +26,8 @@ egui-snarl = { path = "../egui-snarl" }
 image = { version = "0.25.9", features = ["default"] }
 strum = { version = "0.27", features = ["derive"] }
 rfd = "0.17.2"
+
+timeago = "0.5.0"
 
 [build-dependencies]
 bindgen = "0.72.1"

@@ -813,10 +813,14 @@ struct DrawBodyResponse {
     final_rect: Rect,
 }
 
-struct PinResponse {
-    pos: Pos2,
-    wire_color: Color32,
-    wire_style: WireStyle,
+/// Response from viewer's show_input and show_output methods
+pub struct PinResponse {
+    /// Position of the pin
+    pub pos: Pos2,
+    /// Chosen wire color
+    pub wire_color: Color32,
+    /// Chosen wire style
+    pub wire_style: WireStyle,
 }
 
 /// Widget to display [`Snarl`] graph in [`Ui`].
@@ -1148,7 +1152,7 @@ where
                     from_r.pos,
                     to_r.pos,
                     latest_pos,
-                    wire_width.max(2.0),
+                    wire_width.max(2.0) * 1.5,
                     pick_wire_style(from_r.wire_style, to_r.wire_style),
                 );
 
@@ -1165,9 +1169,14 @@ where
             }
         }
 
-        let color = mix_colors(from_r.wire_color, to_r.wire_color);
+        let mut color = mix_colors(from_r.wire_color, to_r.wire_color);
 
         let mut draw_width = wire_width;
+
+        if let Some(new_color) = viewer.override_wire_color(wire.out_pin, wire.in_pin, snarl) {
+            color = new_color;
+        }
+
         if hovered_wire == Some(wire) {
             draw_width *= 1.5;
         }
@@ -1381,6 +1390,8 @@ where
             }
         }
     }
+
+    viewer.final_wire_shapes(&input_info, &output_info, &mut wire_shapes, &snarl);
 
     match wire_shape_idx {
         None => {
@@ -1876,11 +1887,15 @@ where
         node_moved = Some((node, r.drag_delta()));
     }
 
-    if r.clicked_by(PointerButton::Primary) || r.dragged_by(PointerButton::Primary) {
-        if modifiers.shift {
-            snarl_state.select_one_node(modifiers.command, node);
-        } else if modifiers.command {
-            snarl_state.deselect_one_node(node);
+    if r.clicked_by(PointerButton::Primary) {
+        if r.dragged_by(PointerButton::Primary) {
+            if modifiers.shift {
+                snarl_state.select_one_node(modifiers.command, node);
+            } else if modifiers.command {
+                snarl_state.deselect_one_node(node);
+            }
+        } else {
+            viewer.node_clicked(node, snarl);
         }
     }
 

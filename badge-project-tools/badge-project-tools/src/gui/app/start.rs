@@ -1,11 +1,11 @@
-use std::env::current_dir;
+use crate::character::util::AsRichText;
+use crate::gui::app::editor::CharacterEditor;
+use crate::gui::app::{BoxedGuiPage, GuiPage, PageResponse};
 use eframe::emath::Vec2;
 use eframe::epaint::Color32;
-use egui::{Button, Key, Popup, PopupCloseBehavior, Response, RichText, Ui, Widget};
+use egui::{Button, Key, Popup, PopupCloseBehavior, Ui};
 use rfd::FileDialog;
-use crate::character::util::AsRichText;
-use crate::gui::app::{BoxedGuiPage, GuiPage, PageResponse};
-use crate::gui::app::editor::CharacterEditor;
+use std::env::current_dir;
 
 #[derive(Default)]
 pub struct StartScreen {

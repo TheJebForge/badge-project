@@ -66,12 +66,19 @@ impl Into<WidgetText> for &mut SharedString {
     }
 }
 
+impl From<&str> for SharedString {
+    fn from(value: &str) -> Self {
+        value.to_string().into()
+    }
+}
+
 impl Hash for SharedString {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.as_ref().hash(state)
     }
 }
 
+#[allow(dead_code)]
 pub trait AsSharedString {
     fn shared(&self) -> SharedString;
 }

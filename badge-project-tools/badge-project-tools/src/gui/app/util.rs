@@ -1,38 +1,42 @@
 use crate::character::util::AsRichText;
 use crate::gui::app::shared::MutableStringScope;
-use eframe::emath::{Align, Numeric, vec2};
+use eframe::emath::{vec2, Align, Numeric};
 use eframe::epaint::Color32;
 use egui::{ComboBox, DragValue, Frame, InnerResponse, Label, Layout, Response, Ui, WidgetText};
 use image::{ColorType, DynamicImage, ImageReader};
 use std::fmt::Display;
 use std::path::{Path, PathBuf};
-use std::{env, io};
 use strum::IntoEnumIterator;
 
 pub const SPACING: f32 = 6.0;
 
-pub fn list_ui<K, T>(
+pub fn pick_unique_name<K, T>(map: &Vec<(K, T)>) -> K
+where 
+    K: From<String> + Display + MutableStringScope
+{
+    let mut name = "new".to_string();
+
+    let mut count = 1;
+    while map.iter().any(|(e, _)| e.refer(|e| e == &name)) {
+        name = format!("{name}{count}");
+        count += 1;
+    }
+
+    name.into()
+}
+
+pub fn pair_list_ui<K, T>(
     ui: &mut Ui,
     map: &mut Vec<(K, T)>,
-    element_fn: impl Fn(&mut Ui, usize, &mut K, &mut T),
+    element_fn: impl Fn(&mut Ui, usize, &mut K, &mut T, &mut ChangeTracker),
+    tracker: &mut ChangeTracker
 ) where
     K: From<String> + Display + MutableStringScope,
     T: Default,
 {
-    let pick_name = || -> K {
-        let mut name = "new".to_string();
-
-        let mut count = 1;
-        while map.iter().any(|(e, _)| e.refer(|e| e == &name)) {
-            name = format!("{name}{count}");
-            count += 1;
-        }
-
-        name.into()
-    };
-
     if ui.button("+").clicked() {
-        map.insert(0, (pick_name(), T::default()));
+        tracker.mark_change();
+        map.insert(0, (pick_unique_name(map), T::default()));
     }
 
     ui.with_layout(Layout::top_down_justified(Align::LEFT), |ui| {
@@ -65,7 +69,9 @@ pub fn list_ui<K, T>(
                                 ui.add_space(SPACING);
 
                                 key.mutate(|key| {
-                                    ui.text_edit_singleline(key);
+                                    if ui.text_edit_singleline(key).changed() {
+                                        tracker.mark_change();
+                                    }
                                 });
 
                                 ui.take_available_width();
@@ -73,14 +79,115 @@ pub fn list_ui<K, T>(
 
                             ui.separator();
 
-                            element_fn(ui, index, key, value);
+                            element_fn(ui, index, key, value, tracker);
                         });
                 }
 
                 if let Some(index) = to_delete {
+                    tracker.mark_change();
                     map.remove(index);
                 }
             });
+    });
+}
+
+pub fn vec_ui<T>(
+    ui: &mut Ui,
+    vec: &mut Vec<T>,
+    element_fn: impl Fn(&mut Ui, usize, &mut T, &mut ChangeTracker),
+    tracker: &mut ChangeTracker
+) where
+    T: Default
+{
+    if ui.button("+").clicked() {
+        tracker.mark_change();
+        vec.push(T::default());
+    }
+
+    ui.with_layout(Layout::top_down_justified(Align::LEFT), |ui| {
+        Frame::new()
+            .fill(ui.style().visuals.text_edit_bg_color())
+            .corner_radius(SPACING)
+            .inner_margin(SPACING)
+            .show(ui, |ui| {
+                if vec.is_empty() {
+                    ui.vertical_centered_justified(|ui| {
+                        ui.label("Empty".rich().size(16.0).color(Color32::GRAY));
+                    });
+
+                    return;
+                }
+
+                let mut to_delete: Option<usize> = None;
+                let mut to_move: Option<(usize, usize)> = None;
+
+                let vec_size = vec.len();
+
+                for (index, value) in vec.iter_mut().enumerate() {
+                    Frame::new()
+                        .fill(ui.style().visuals.widgets.noninteractive.bg_fill)
+                        .corner_radius(SPACING / 2.0)
+                        .inner_margin(SPACING)
+                        .show(ui, |ui| {
+                            ui.horizontal(|ui| {
+                                if ui.button("X").clicked() {
+                                    to_delete = Some(index)
+                                }
+
+                                ui.add_space(SPACING);
+
+                                if ui.button("⏫").clicked() {
+                                    to_move = Some((index, 0));
+                                }
+
+                                if ui.button("⏶").clicked() {
+                                    let prev = if index > 0 {
+                                        index - 1
+                                    } else {
+                                        0
+                                    };
+
+                                    to_move = Some((index, prev));
+                                }
+
+                                if ui.button("⏷").clicked() {
+                                    let next = if index < vec_size - 1 {
+                                        index + 1
+                                    } else {
+                                        vec_size - 1
+                                    };
+
+                                    to_move = Some((index, next))
+                                }
+
+                                if ui.button("⏬").clicked() {
+                                    to_move = Some((index, vec_size - 1))
+                                }
+
+                                ui.add_space(SPACING);
+
+                                ui.label(format!("#{index}"));
+
+                                ui.take_available_width();
+                            });
+
+                            ui.separator();
+
+                            element_fn(ui, index, value, tracker);
+                        });
+                }
+
+                if let Some(index) = to_delete {
+                    tracker.mark_change();
+                    vec.remove(index);
+                }
+
+                if let Some((index, new_index)) = to_move {
+                    tracker.mark_change();
+                    let value = vec.remove(index);
+                    vec.insert(new_index, value);
+                }
+            })
     });
 }
 
@@ -101,10 +208,35 @@ pub fn inline_drag_value(
     label: impl Into<WidgetText>,
     numeric: &mut impl Numeric,
     width: f32,
+    tracker: &mut ChangeTracker
 ) -> InnerResponse<()> {
     ui.horizontal_top(|ui| {
         inline_style_label(ui, label, width);
-        ui.add(DragValue::new(numeric));
+        if ui.add(DragValue::new(numeric)).changed() {
+            tracker.mark_change()
+        }
+    })
+}
+
+pub fn inline_duration_value(
+    ui: &mut Ui,
+    label: impl Into<WidgetText>,
+    duration: &mut i64,
+    width: f32,
+    tracker: &mut ChangeTracker
+) -> InnerResponse<()> {
+    ui.horizontal_top(|ui| {
+        inline_style_label(ui, label, width);
+        if ui.add(DragValue::from_get_set(|value| {
+            if let Some(value) = value {
+                *duration = (value * 1_000_000.0).floor() as i64;
+            }
+
+            *duration as f64 / 1_000_000.0
+        }).range(0i64..=i64::MAX)).changed() {
+            tracker.mark_change()
+        }
+        ui.label("secs");
     })
 }
 
@@ -113,10 +245,13 @@ pub fn inline_checkbox(
     label: impl Into<WidgetText>,
     value: &mut bool,
     width: f32,
+    tracker: &mut ChangeTracker
 ) -> InnerResponse<()> {
     ui.horizontal_top(|ui| {
         inline_style_label(ui, label, width);
-        ui.checkbox(value, "");
+        if ui.checkbox(value, "").changed() {
+            tracker.mark_change()
+        }
     })
 }
 
@@ -125,12 +260,15 @@ pub fn inline_color_edit_rgb_tuple(
     label: impl Into<WidgetText>,
     color: &mut (u8, u8, u8),
     width: f32,
+    tracker: &mut ChangeTracker
 ) -> InnerResponse<()> {
     let mut arr: [u8; 3] = (*color).into();
 
     let resp = ui.horizontal_top(|ui| {
         inline_style_label(ui, label, width);
-        ui.color_edit_button_srgb(&mut arr);
+        if ui.color_edit_button_srgb(&mut arr).changed() {
+            tracker.mark_change()
+        }
     });
 
     color.0 = arr[0];
@@ -145,20 +283,23 @@ pub fn inline_enum_edit<T>(
     label: impl Into<WidgetText>,
     value: &mut T,
     width: f32,
+    tracker: &mut ChangeTracker
 ) -> InnerResponse<()>
 where
     T: IntoEnumIterator + Display + PartialEq,
 {
     ui.horizontal(|ui| {
         let id = inline_style_label(ui, label, width).response.id;
-        ComboBox::new(id.with("combo"), "")
+        if ComboBox::new(id.with("combo"), "")
             .selected_text(value.to_string())
             .show_ui(ui, |ui| {
                 for variant in T::iter() {
                     let label = variant.to_string();
                     ui.selectable_value(value, variant, label);
                 }
-            });
+            }).response.changed() {
+            tracker.mark_change()
+        }
     })
 }
 
@@ -167,10 +308,13 @@ pub fn inline_text_edit(
     label: impl Into<WidgetText>,
     value: &mut String,
     width: f32,
+    tracker: &mut ChangeTracker
 ) -> InnerResponse<()> {
     ui.horizontal(|ui| {
         inline_style_label(ui, label, width);
-        ui.text_edit_singleline(value);
+        if ui.text_edit_singleline(value).changed() {
+            tracker.mark_change()
+        }
     })
 }
 
@@ -212,6 +356,7 @@ pub fn inline_folder_picker(
     value: &mut PathBuf,
     location: impl AsRef<Path>,
     width: f32,
+    tracker: &mut ChangeTracker
 ) -> InnerResponse<()> {
     let location = location.as_ref().to_path_buf();
 
@@ -229,6 +374,7 @@ pub fn inline_folder_picker(
                     }
                     Err(_) => *value = picked_folder,
                 }
+                tracker.mark_change();
             }
         }
         disabled_text_edit(ui, value.to_string_lossy(), BUTTON_WIDTH);
@@ -249,6 +395,7 @@ pub fn inline_resource_picker<K, V>(
     value: &mut K,
     collection: &Vec<(K, V)>,
     width: f32,
+    tracker: &mut ChangeTracker
 ) -> InnerResponse<()>
 where
     K: Display + PartialEq + Clone,
@@ -261,8 +408,38 @@ where
                 for (k, _) in collection {
                     if ui.selectable_label(value == k, k.rich()).clicked() {
                         *value = k.clone();
+                        tracker.mark_change()
                     }
                 }
             });
     })
+}
+
+#[derive(Default)]
+pub struct ChangeTracker {
+    unsaved: bool,
+    changed_this_frame: bool
+}
+
+impl ChangeTracker {
+    pub fn mark_change(&mut self) {
+        self.unsaved = true;
+        self.changed_this_frame = true;
+    }
+
+    pub fn unsaved(&self) -> bool {
+        self.unsaved
+    }
+
+    pub fn changed(&self) -> bool {
+        self.changed_this_frame
+    }
+
+    pub fn mark_saved(&mut self) {
+        self.unsaved = false;
+    }
+
+    pub fn mark_clean(&mut self) {
+        self.changed_this_frame = false;
+    }
 }

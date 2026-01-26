@@ -1,11 +1,9 @@
-use egui::{emath::TSTransform, Painter, Pos2, Rect, Style, Ui};
+use egui::{emath::TSTransform, Color32, Painter, Pos2, Rect, Shape, Style, Ui};
+use std::collections::HashMap;
 
 use crate::{InPin, InPinId, NodeId, OutPin, OutPinId, Snarl};
 
-use super::{
-    pin::{AnyPins, SnarlPin},
-    BackgroundPattern, NodeLayout, SnarlStyle,
-};
+use super::{pin::{AnyPins, SnarlPin}, BackgroundPattern, NodeLayout, PinResponse, SnarlStyle};
 
 /// `SnarlViewer` is a trait for viewing a Snarl.
 ///
@@ -151,6 +149,28 @@ pub trait SnarlViewer<T> {
         let _ = node;
         false
     }
+    
+    /// Lets the viewer override specific wire color
+    fn override_wire_color(
+        &mut self,
+        out_pin: OutPinId,
+        in_pin: InPinId,
+        snarl: &Snarl<T>,
+    ) -> Option<Color32> {
+        let _ = (out_pin, in_pin, snarl);
+        None
+    }
+
+    /// Allows the viewer to mutate the wire shapes vector
+    fn final_wire_shapes(
+        &mut self,
+        in_pins: &HashMap<InPinId, PinResponse>,
+        out_pins: &HashMap<OutPinId, PinResponse>,
+        shapes: &mut Vec<Shape>,
+        snarl: &Snarl<T>
+    ) {
+        let _ = (in_pins, out_pins, shapes, snarl);
+    }
 
     /// Renders the node's body.
     #[inline]
@@ -192,6 +212,12 @@ pub trait SnarlViewer<T> {
     #[inline]
     fn final_node_rect(&mut self, node: NodeId, rect: Rect, ui: &mut Ui, snarl: &mut Snarl<T>) {
         let _ = (node, rect, ui, snarl);
+    }
+
+    /// Reports when node is clicked
+    #[inline]
+    fn node_clicked(&mut self, node: NodeId, snarl: &mut Snarl<T>) {
+        let _ = (node, snarl);
     }
 
     /// Checks if node has something to show in on-hover popup.
@@ -298,7 +324,9 @@ pub trait SnarlViewer<T> {
 
     /// Notifies that wire was clicked.
     #[inline]
-    fn wire_select(&mut self, from: &OutPin, to: &InPin, snarl: &mut Snarl<T>) {}
+    fn wire_select(&mut self, from: &OutPin, to: &InPin, snarl: &mut Snarl<T>) {
+        let _ = (from, to, snarl);
+    }
 
     /// Asks the viewer to disconnect two pins.
     #[inline]
@@ -353,7 +381,7 @@ pub trait SnarlViewer<T> {
         rect: Rect,
         snarl: &mut Snarl<T>
     ) {
-        
+        let _ = (rect, snarl);
     }
 
     /// Informs the viewer what is the current transform of the snarl view
