@@ -4,10 +4,10 @@
 
 include!(concat!(env!("OUT_DIR"), "/bindings.rs"));
 
-use crate::character::{process_character, CharacterCli};
+use crate::character::{process_character_cli, CharacterCli};
+use crate::gui::{start_gui, GuiCli};
 use crate::image::{process_image, ImageCli};
 use clap::Parser;
-use crate::gui::{start_gui, GuiCli};
 
 pub mod image;
 pub mod character;
@@ -35,7 +35,7 @@ fn main() -> anyhow::Result<()> {
 
     match cli.command {
         CliCommand::Image(img) => process_image(img),
-        CliCommand::Char(char) => process_character(char),
+        CliCommand::Char(char) => process_character_cli(char),
         CliCommand::Gui(_) => start_gui(),
     }
 }

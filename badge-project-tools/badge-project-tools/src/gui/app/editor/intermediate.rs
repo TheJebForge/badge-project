@@ -60,7 +60,7 @@ impl InterState {
     pub fn from_state(
         state: State,
         names: &Vec<SharedString>,
-        images: &Vec<(SharedString, LoadedImage)>,
+        images: &Vec<(SharedString, SharedLoadedImage)>,
         animations: &Vec<(SharedString, Animation)>
     ) -> Option<InterState> {
         let image = match state.image {
@@ -134,7 +134,7 @@ impl InterState {
         })
     }
 
-    pub fn into_state(self, images: &Vec<(SharedString, LoadedImage)>) -> Option<State> {
+    pub fn into_state(self, images: &Vec<(SharedString, SharedLoadedImage)>) -> Option<State> {
         Some(State {
             image: match self.image {
                 InterStateImage::None => StateImage::None,
@@ -142,7 +142,7 @@ impl InterState {
                     image, width, height, alpha, upscale, preload
                 } => StateImage::Single {
                     name: image.to_string(),
-                    path: images.iter().find(|(k, _)| k == &image)?.1.path.clone(),
+                    path: images.iter().find(|(k, _)| k == &image)?.1.borrow().path.clone(),
                     width,
                     height,
                     alpha,
@@ -164,7 +164,7 @@ impl InterState {
                         .filter_map(|e| {
                             Some(SequenceFrame {
                                 name: e.image.to_string(),
-                                path: images.iter().find(|(k, _)| k == &e.image)?.1.path.clone(),
+                                path: images.iter().find(|(k, _)| k == &e.image)?.1.borrow().path.clone(),
                                 width: e.width,
                                 height: e.height,
                                 alpha: e.alpha,
@@ -226,7 +226,7 @@ impl Default for InterSequenceFrame {
             height: 320,
             alpha: false,
             upscale: false,
-            duration: 0,
+            duration: 1_000_000,
         }
     }
 }
@@ -255,7 +255,9 @@ pub struct LoadedImage {
     pub handle: Option<TextureHandle>
 }
 
-pub fn find_images(map: &HashMap<String, State>, location: impl AsRef<Path>) -> Vec<(SharedString, LoadedImage)> {
+pub type SharedLoadedImage = Rc<RefCell<LoadedImage>>;
+
+pub fn find_images(map: &HashMap<String, State>, location: impl AsRef<Path>) -> Vec<(SharedString, SharedLoadedImage)> {
     let mut found_images: Vec<(SharedString, PathBuf)> = vec![];
 
     let mut add_unique = |name: &String, path: &PathBuf| {
@@ -281,10 +283,10 @@ pub fn find_images(map: &HashMap<String, State>, location: impl AsRef<Path>) -> 
     let base_location = location.as_ref().to_path_buf();
 
     found_images.into_iter()
-        .map(|(k, v)| (k, LoadedImage {
+        .map(|(k, v)| (k, Rc::new(RefCell::new(LoadedImage {
             image: load_image_or_black(base_location.join(&v)),
             path: v,
             handle: None
-        }))
+        }))))
         .collect()
 }

@@ -5,25 +5,26 @@ mod validation;
 
 use crate::character::repr::{Animation, Character, State};
 use crate::character::util::AsRichText;
-use crate::gui::app::editor::intermediate::{find_images, InterAction, InterState, LoadedImage, SharedInterState};
+use crate::gui::app::editor::intermediate::{find_images, InterAction, InterState, LoadedImage, SharedInterState, SharedLoadedImage};
 use crate::gui::app::editor::nodes::{snarl_from_states, snarl_style, ViewerSelection};
 use crate::gui::app::shared::SharedString;
 use crate::gui::app::start::StartScreen;
 use crate::gui::app::{util, BoxedGuiPage, GuiPage, PageResponse};
 use anyhow::anyhow;
 use egui::containers::menu::MenuButton;
-use egui::{vec2, Button, CentralPanel, Color32, ColorImage, Image, InnerResponse, Key, Sense, TextureOptions, TopBottomPanel, Ui, WidgetText};
+use egui::{vec2, Button, CentralPanel, Color32, ColorImage, ComboBox, Image, InnerResponse, Key, Sense, TextureHandle, TextureOptions, TopBottomPanel, Ui, WidgetText};
 use egui_snarl::ui::SnarlStyle;
 use egui_snarl::Snarl;
-use std::cell::RefCell;
+use std::cell::{RefCell, RefMut};
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::{env, fs};
 use std::fmt::Display;
 use std::time::Instant;
 use strum::{Display, EnumIter, IntoEnumIterator};
+use crate::character::process_character_archive;
 use crate::gui::app::editor::validation::ValidationError;
-use crate::gui::app::util::ChangeTracker;
+use crate::gui::app::util::{inline_style_label, pick_unique_name, ChangeTracker};
 
 pub struct CharacterEditor {
     tab: EditorTab,
@@ -34,7 +35,7 @@ pub struct CharacterEditor {
     name: String,
     species: String,
     default_state: SharedString,
-    images: Vec<(SharedString, LoadedImage)>,
+    images: Vec<(SharedString, SharedLoadedImage)>,
     animations: Vec<(SharedString, Animation)>,
     actions: Vec<(String, InterAction)>,
     states: Vec<(SharedString, SharedInterState)>,
@@ -195,8 +196,30 @@ impl CharacterEditor {
     pub fn save_as(&mut self) {
         match self.save_file(false) {
             Ok(_) => {}
-            Err(err) => println!("Error while saving: {err}")
+            Err(err) => eprintln!("Error while saving: {err}")
         };
+    }
+
+    pub fn export_character(&self) -> anyhow::Result<()> {
+        let Some(picked_file) = rfd::FileDialog::new()
+            .set_title("Save character archive file")
+            .add_filter("Character Archive", &["tar"])
+            .set_directory(&self.location)
+            .save_file()
+        else {
+            return Err(anyhow!("Cancelled!"));
+        };
+
+        let char = self.as_repr();
+
+        process_character_archive(char, picked_file)
+    }
+
+    pub fn export(&self) {
+        match self.export_character() {
+            Ok(_) => {}
+            Err(err) => eprintln!("Error while exporting: {err}")
+        }
     }
 }
 
@@ -204,87 +227,203 @@ pub const IMAGE_EXTENSIONS: &[&'static str] = &["png", "jpg", "jpeg", "bmp", "tg
 
 const IMAGE_SIZE: f32 = 200.0;
 
+fn pick_image_filepath(location: impl AsRef<Path>) -> Option<PathBuf> {
+    let location = location.as_ref();
+
+    let Some(picked_file) = rfd::FileDialog::new()
+        .set_title("Pick image file")
+        .add_filter("Image", IMAGE_EXTENSIONS)
+        .set_directory(&location)
+        .pick_file()
+    else {
+        return None;
+    };
+
+    let stripped = match picked_file.strip_prefix(&location) {
+        Ok(relative) => relative.to_path_buf(),
+        Err(_) => picked_file
+    };
+
+    Some(stripped)
+}
+
+fn try_set_loaded_image(
+    path: impl AsRef<Path>,
+    value: &mut RefMut<LoadedImage>,
+    tracker: &mut ChangeTracker,
+    location: impl AsRef<Path>,
+) {
+    let path = path.as_ref();
+    let location = location.as_ref();
+
+    let image = match util::load_image(location.join(path)) {
+        Ok(image) => image,
+        Err(err) => {
+            eprintln!("Failed to load image! {err}");
+            return;
+        }
+    };
+
+    value.image = image;
+    value.path = path.to_path_buf();
+    value.handle = None;
+
+    tracker.mark_change()
+}
+
+fn pick_image_file(value: &mut RefMut<LoadedImage>, tracker: &mut ChangeTracker, location: impl AsRef<Path>) {
+    let location = location.as_ref();
+
+    let Some(stripped) = pick_image_filepath(location) else {
+        return
+    };
+
+    try_set_loaded_image(stripped, value, tracker, location)
+}
+
+fn get_texture_handle(ui: &mut Ui, value: &mut RefMut<LoadedImage>) -> TextureHandle {
+    if value.handle.is_none() {
+        let img = value.image.to_rgba8();
+
+        value.handle = Some(ui.ctx().load_texture(
+            value.path.to_string_lossy(),
+            ColorImage::from_rgba_unmultiplied(
+                [value.image.width() as _, value.image.height() as _],
+                img.as_flat_samples().as_slice()
+            ),
+            TextureOptions::LINEAR
+        ))
+    }
+
+    value.handle.clone().unwrap()
+}
+
 pub fn inline_image_picker(
     ui: &mut Ui,
     label: impl Into<WidgetText>,
-    value: &mut LoadedImage,
+    value: &mut SharedLoadedImage,
     location: impl AsRef<Path>,
     width: f32,
     tracker: &mut ChangeTracker
 ) -> InnerResponse<()> {
-    let location = location.as_ref().to_path_buf();
+    let location = location.as_ref();
+    let mut value = value.borrow_mut();
 
     let content = value.path.to_string_lossy().to_string();
-
-    let try_pick_file = |value: &mut LoadedImage, tracker: &mut ChangeTracker| {
-        let Some(picked_file) = rfd::FileDialog::new()
-            .set_title("Pick image file")
-            .add_filter("Image", IMAGE_EXTENSIONS)
-            .set_directory(&location)
-            .pick_file()
-        else {
-            return;
-        };
-
-        let stripped = match picked_file.strip_prefix(&location) {
-            Ok(relative) => relative.to_path_buf(),
-            Err(_) => picked_file
-        };
-
-        let image = match util::load_image(location.join(&stripped)) {
-            Ok(image) => image,
-            Err(err) => {
-                eprintln!("Failed to load image! {err}");
-                return;
-            }
-        };
-
-        value.image = image;
-        value.path = stripped;
-        value.handle = None;
-
-        tracker.mark_change()
-    };
-
-    let get_handle = |ui: &mut Ui, value: &mut LoadedImage| {
-        if value.handle.is_none() {
-            let img = value.image.to_rgba8();
-
-            value.handle = Some(ui.ctx().load_texture(
-                value.path.to_string_lossy(),
-                ColorImage::from_rgba_unmultiplied(
-                    [value.image.width() as _, value.image.height() as _],
-                    img.as_flat_samples().as_slice()
-                ),
-                TextureOptions::LINEAR
-            ))
-        }
-
-        value.handle.clone().unwrap()
-    };
 
     ui.vertical(|ui| {
         ui.horizontal(|ui| {
             util::inline_style_label(ui, label, width);
             if ui.button("Pick Image").clicked() {
-                try_pick_file(value, tracker)
+                pick_image_file(&mut value, tracker, location)
             }
             util::disabled_text_edit(ui, content, util::BUTTON_WIDTH);
         });
 
         ui.horizontal(|ui| {
-            ui.add_space(width);
+            ui.add_space(width + ui.style().spacing.item_spacing.x);
 
             let img_size = vec2(IMAGE_SIZE, IMAGE_SIZE);
 
-            let img = Image::new(&get_handle(ui, value))
+            let img = Image::new(&get_texture_handle(ui, &mut value))
                 .fit_to_exact_size(img_size);
             ui.add_sized(img_size, img);
         });
         ui.horizontal(|ui| {
-            ui.add_space(width);
+            ui.add_space(width + ui.style().spacing.item_spacing.x);
             ui.label(format!("({} x {})", value.image.width(), value.image.height()));
         });
+    })
+}
+
+pub fn inline_image_resource_picker(
+    ui: &mut Ui,
+    label: impl Into<WidgetText>,
+    value: &mut SharedString,
+    images: &mut Vec<(SharedString, SharedLoadedImage)>,
+    location: impl AsRef<Path>,
+    width: f32,
+    tracker: &mut ChangeTracker
+) -> InnerResponse<()> {
+    let location = location.as_ref();
+
+    ui.vertical(|ui| {
+        ui.horizontal(|ui| {
+            let id = inline_style_label(ui, label, width).response.id;
+            ComboBox::new(id.with("combo"), "")
+                .selected_text(value.to_string())
+                .show_ui(ui, |ui| {
+                    for (k, _) in &mut *images {
+                        if ui.selectable_label(value == k, k.rich()).clicked() {
+                            *value = k.clone();
+                            tracker.mark_change()
+                        }
+                    }
+                });
+
+            if ui.button("Pick New Image").clicked() {
+                if let Some(filepath) = pick_image_filepath(location) {
+                    if let Some(file_stem) = filepath.file_stem() {
+                        let new_unique = pick_unique_name(
+                            file_stem.to_string_lossy().to_string(),
+                            &images
+                        );
+
+                        images.insert(0, (new_unique.clone(), SharedLoadedImage::default()));
+                        let (_, image) = images.get_mut(0).unwrap();
+                        try_set_loaded_image(filepath, &mut image.borrow_mut(), tracker, location);
+
+                        *value = new_unique;
+                    }
+                }
+            }
+        });
+
+        let index = ui.memory_mut(|mem| {
+            let index = mem.data.get_persisted_mut_or_insert_with::<Option<usize>>(
+                ui.id().with(&value),
+                || {
+                    Some(images.iter().enumerate().find(|(_, (k, _))| k == value)?.0)
+                }
+            );
+
+            if let Some(index) = index {
+                if let Some((k, _)) = images.get(*index) {
+                    if k != value {
+                        if let Some((new_index, _)) = images.iter().enumerate().find(|(_, (k, _))| k == value) {
+                            *index = new_index;
+                        } else {
+                            return None;
+                        }
+                    }
+
+                    return Some(*index)
+                }
+            }
+
+            None
+        });
+
+        if let Some(index) = index {
+            let (_, image) = images.get_mut(index).unwrap();
+
+            let mut image = image.borrow_mut();
+
+            ui.horizontal(|ui| {
+                ui.add_space(width + ui.style().spacing.item_spacing.x);
+
+                let img_size = vec2(IMAGE_SIZE, IMAGE_SIZE) / 2.0;
+
+                let img = Image::new(&get_texture_handle(ui, &mut image))
+                    .fit_to_exact_size(img_size);
+                ui.add_sized(img_size, img);
+            });
+
+            ui.horizontal(|ui| {
+                ui.add_space(width + ui.style().spacing.item_spacing.x);
+                ui.label(format!("({} x {})", image.image.width(), image.image.height()));
+            });
+        }
     })
 }
 
@@ -316,6 +455,10 @@ impl GuiPage for CharacterEditor {
             self.save_as();
         }
 
+        if ui.input(|k| k.modifiers.ctrl && k.key_pressed(Key::E)) {
+            self.export();
+        }
+
         let button_resp = TopBottomPanel::top("editor.top")
             .show(ui.ctx(), |ui| {
                 ui.horizontal_centered(|ui| {
@@ -329,6 +472,10 @@ impl GuiPage for CharacterEditor {
 
                             if ui.button("Save As (Ctrl + Shift + S)").clicked() {
                                 self.save_as()
+                            }
+
+                            if ui.button("Export (Ctrl + E)").clicked() {
+                                self.export()
                             }
 
                             ui.separator();
@@ -371,17 +518,19 @@ impl GuiPage for CharacterEditor {
                         "Never saved".to_string()
                     }.rich().color(Color32::GRAY));
 
-                    if let Some(error) = self.validation_errors.first() {
-                        ui.separator();
-                        ui.label(error.rich().color(Color32::RED));
-                    }
-
                     None
                 }).inner
             }).inner;
 
         if let Some(resp) = button_resp {
             return resp
+        }
+
+        if let Some(error) = self.validation_errors.first() {
+            TopBottomPanel::bottom("editor.bottom")
+                .show(ui.ctx(), |ui| {
+                    ui.label(error.rich().color(Color32::RED));
+                });
         }
 
         CentralPanel::default()

@@ -50,14 +50,17 @@ fn save_image(char_path: impl AsRef<Path>, mut archive: &mut Builder<File>, name
     Ok(())
 }
 
-pub fn process_character(cli: CharacterCli) -> anyhow::Result<()> {
+pub fn process_character_cli(cli: CharacterCli) -> anyhow::Result<()> {
     let char: Character = serde_json::from_str(&fs::read_to_string(cli.input_file)?)?;
+    process_character_archive(char, cli.output_file)
+}
 
-    let file = File::create(cli.output_file)?;
+pub fn process_character_archive(char: Character, path: impl AsRef<Path>) -> anyhow::Result<()> {
+    let file = File::create(path)?;
 
     let char_path = Path::new("characters").join(&char.id);
 
-    let mut archive = tar::Builder::new(file);
+    let mut archive = Builder::new(file);
     append_vec(&mut archive, char_path.join("character.bin"), &char.to_bin()?)?;
 
     for (state_name, state) in &char.states {

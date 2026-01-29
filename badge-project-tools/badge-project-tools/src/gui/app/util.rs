@@ -10,12 +10,10 @@ use strum::IntoEnumIterator;
 
 pub const SPACING: f32 = 6.0;
 
-pub fn pick_unique_name<K, T>(map: &Vec<(K, T)>) -> K
+pub fn pick_unique_name<K, T>(mut name: String, map: &Vec<(K, T)>) -> K
 where 
     K: From<String> + Display + MutableStringScope
 {
-    let mut name = "new".to_string();
-
     let mut count = 1;
     while map.iter().any(|(e, _)| e.refer(|e| e == &name)) {
         name = format!("{name}{count}");
@@ -36,7 +34,7 @@ pub fn pair_list_ui<K, T>(
 {
     if ui.button("+").clicked() {
         tracker.mark_change();
-        map.insert(0, (pick_unique_name(map), T::default()));
+        map.insert(0, (pick_unique_name("new".to_string(), map), T::default()));
     }
 
     ui.with_layout(Layout::top_down_justified(Align::LEFT), |ui| {
@@ -91,10 +89,11 @@ pub fn pair_list_ui<K, T>(
     });
 }
 
-pub fn vec_ui<T>(
+pub fn vec_ui<T, O>(
     ui: &mut Ui,
     vec: &mut Vec<T>,
-    element_fn: impl Fn(&mut Ui, usize, &mut T, &mut ChangeTracker),
+    mut refs: O,
+    element_fn: impl Fn(&mut Ui, usize, &mut T, &mut O, &mut ChangeTracker),
     tracker: &mut ChangeTracker
 ) where
     T: Default
@@ -173,7 +172,7 @@ pub fn vec_ui<T>(
 
                             ui.separator();
 
-                            element_fn(ui, index, value, tracker);
+                            element_fn(ui, index, value, &mut refs, tracker);
                         });
                 }
 

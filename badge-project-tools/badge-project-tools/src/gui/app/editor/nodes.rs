@@ -1,7 +1,7 @@
 use crate::character::repr::StateTransitionTrigger;
 use crate::character::util::AsRichText;
 use crate::gui::app::editor::intermediate::{InterState, InterStateImage, InterStateTransition, SharedInterState, SharedInterStateTransition};
-use crate::gui::app::editor::{inline_validation_error, CharacterEditor};
+use crate::gui::app::editor::{inline_image_resource_picker, inline_validation_error, CharacterEditor};
 use crate::gui::app::shared::{MutableStringScope, SharedString};
 use crate::gui::app::util::{inline_checkbox, inline_drag_value, inline_duration_value, inline_enum_edit, inline_resource_picker, inline_style_label, inline_text_edit, pick_unique_name, vec_ui, ChangeTracker};
 use eframe::emath::{Pos2, Rect};
@@ -117,7 +117,7 @@ const ERROR_BG_COLOR: Color32 = Color32::from_rgb(70, 0, 0);
 
 impl StateViewer<'_> {
     fn create_state(&mut self, pos: Pos2, out_pin_id: Option<OutPinId>, snarl: &mut Snarl<StateNode>) {
-        let name = pick_unique_name(&self.states);
+        let name = pick_unique_name("new".to_string(), &self.states);
         let state = Rc::new(RefCell::new(InterState::default()));
         let node = (name, state);
 
@@ -618,11 +618,12 @@ impl CharacterEditor {
                                     upscale,
                                     preload,
                                 } => {
-                                    inline_resource_picker(
+                                    inline_image_resource_picker(
                                         ui,
                                         "Image:",
                                         image,
-                                        &self.images,
+                                        &mut self.images,
+                                        &self.location,
                                         TEXT_WIDTH,
                                         &mut self.tracker
                                     );
@@ -701,12 +702,15 @@ impl CharacterEditor {
                                 InterStateImage::Sequence { frames, mode } => {
                                     inline_enum_edit(ui, "Mode:", mode, TEXT_WIDTH, &mut self.tracker);
                                     ui.collapsing("Frames", |ui| {
-                                        vec_ui(ui, frames, |ui, index, frame, tracker| {
-                                            inline_resource_picker(
+                                        let images = &mut self.images;
+
+                                        vec_ui(ui, frames, images, |ui, index, frame, images, tracker| {
+                                            inline_image_resource_picker(
                                                 ui,
                                                 "Image:",
                                                 &mut frame.image,
-                                                &self.images,
+                                                images,
+                                                &self.location,
                                                 TEXT_WIDTH,
                                                 tracker
                                             );
