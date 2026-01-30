@@ -2,13 +2,18 @@ mod intermediate;
 mod resources;
 mod nodes;
 mod validation;
+mod simulator;
 
+use crate::character::process_character_archive;
 use crate::character::repr::{Animation, Character, State};
 use crate::character::util::AsRichText;
 use crate::gui::app::editor::intermediate::{find_images, InterAction, InterState, LoadedImage, SharedInterState, SharedLoadedImage};
 use crate::gui::app::editor::nodes::{snarl_from_states, snarl_style, ViewerSelection};
+use crate::gui::app::editor::simulator::{simulator_ui, SimulatorState};
+use crate::gui::app::editor::validation::ValidationError;
 use crate::gui::app::shared::SharedString;
 use crate::gui::app::start::StartScreen;
+use crate::gui::app::util::{inline_style_label, pick_unique_name, ChangeTracker};
 use crate::gui::app::{util, BoxedGuiPage, GuiPage, PageResponse};
 use anyhow::anyhow;
 use egui::containers::menu::MenuButton;
@@ -16,15 +21,12 @@ use egui::{vec2, Button, CentralPanel, Color32, ColorImage, ComboBox, Image, Inn
 use egui_snarl::ui::SnarlStyle;
 use egui_snarl::Snarl;
 use std::cell::{RefCell, RefMut};
+use std::fmt::Display;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
-use std::{env, fs};
-use std::fmt::Display;
 use std::time::Instant;
+use std::{env, fs};
 use strum::{Display, EnumIter, IntoEnumIterator};
-use crate::character::process_character_archive;
-use crate::gui::app::editor::validation::ValidationError;
-use crate::gui::app::util::{inline_style_label, pick_unique_name, ChangeTracker};
 
 pub struct CharacterEditor {
     tab: EditorTab,
@@ -43,14 +45,17 @@ pub struct CharacterEditor {
     graph_style: SnarlStyle,
     graph_selection: ViewerSelection,
     tracker: ChangeTracker,
-    validation_errors: Vec<ValidationError>
+    validation_errors: Vec<ValidationError>,
+    simulator_state: Option<SimulatorState>
 }
 
 #[derive(Copy, Clone, EnumIter, Default, Display, Eq, PartialEq)]
 enum EditorTab {
     #[default]
     Resources,
-    StateMachine
+    #[strum(to_string = "State Machine")]
+    StateMachine,
+    Simulator
 }
 
 impl CharacterEditor {
@@ -104,6 +109,7 @@ impl CharacterEditor {
             graph_selection: ViewerSelection::default(),
             tracker: Default::default(),
             validation_errors: vec![],
+            simulator_state: None,
         };
 
         state.validation_errors = state.validate_state();
@@ -461,64 +467,66 @@ impl GuiPage for CharacterEditor {
 
         let button_resp = TopBottomPanel::top("editor.top")
             .show(ui.ctx(), |ui| {
-                ui.horizontal_centered(|ui| {
-                    if let Some(resp) = MenuButton::new("File")
-                        .ui(ui, |ui| {
-                            ui.allocate_exact_size(vec2(100.0, 0.0), Sense::empty());
+                ui.add_enabled_ui(self.simulator_state.is_none(), |ui| {
+                    ui.horizontal_centered(|ui| {
+                        if let Some(resp) = MenuButton::new("File")
+                            .ui(ui, |ui| {
+                                ui.allocate_exact_size(vec2(100.0, 0.0), Sense::empty());
 
-                            if ui.button("Save (Ctrl + S)".rich()).clicked() {
-                                self.save()
+                                if ui.button("Save (Ctrl + S)".rich()).clicked() {
+                                    self.save()
+                                }
+
+                                if ui.button("Save As (Ctrl + Shift + S)").clicked() {
+                                    self.save_as()
+                                }
+
+                                if ui.button("Export (Ctrl + E)").clicked() {
+                                    self.export()
+                                }
+
+                                ui.separator();
+
+                                if ui.button("Exit to Start").clicked() {
+                                    return Some(PageResponse::SwitchPage(StartScreen::new()))
+                                }
+
+                                None
+                            }).1 {
+                            if let Some(resp) = resp.inner {
+                                return Some(resp)
                             }
-
-                            if ui.button("Save As (Ctrl + Shift + S)").clicked() {
-                                self.save_as()
-                            }
-
-                            if ui.button("Export (Ctrl + E)").clicked() {
-                                self.export()
-                            }
-
-                            ui.separator();
-
-                            if ui.button("Exit to Start").clicked() {
-                                return Some(PageResponse::SwitchPage(StartScreen::new()))
-                            }
-
-                            None
-                        }).1 {
-                        if let Some(resp) = resp.inner {
-                            return Some(resp)
                         }
-                    }
 
-                    ui.separator();
+                        ui.separator();
 
-                    for variant in EditorTab::iter() {
-                        if ui.add(
-                            Button::new(variant.rich())
-                                .selected(variant == self.tab)
-                        ).clicked() {
-                            self.tab = variant
+                        for variant in EditorTab::iter() {
+                            if ui.add(
+                                Button::new(variant.rich())
+                                    .selected(variant == self.tab)
+                            ).clicked() {
+                                self.tab = variant
+                            }
                         }
-                    }
 
-                    ui.separator();
+                        ui.separator();
 
-                    if self.tracker.unsaved() {
-                        ui.label("Unsaved changes!");
-                    }
+                        if self.tracker.unsaved() {
+                            ui.label("Unsaved changes!");
+                        }
 
-                    ui.label(if let Some(last_save) = &self.last_save {
-                        let diff = Instant::now() - *last_save;
+                        ui.label(if let Some(last_save) = &self.last_save {
+                            let diff = Instant::now() - *last_save;
 
-                        let fmt = timeago::Formatter::new();
+                            let fmt = timeago::Formatter::new();
 
-                        format!("Last saved: {}", fmt.convert(diff))
-                    } else {
-                        "Never saved".to_string()
-                    }.rich().color(Color32::GRAY));
+                            format!("Last saved: {}", fmt.convert(diff))
+                        } else {
+                            "Never saved".to_string()
+                        }.rich().color(Color32::GRAY));
 
-                    None
+                        None
+                    }).inner
                 }).inner
             }).inner;
 
@@ -542,6 +550,20 @@ impl GuiPage for CharacterEditor {
 
                     EditorTab::StateMachine => {
                         self.state_machine_ui(ui);
+                    }
+                    EditorTab::Simulator => {
+                        simulator_ui(
+                            ui,
+                            &mut self.simulator_state,
+                            &self.images,
+                            &self.animations,
+                            &self.states,
+                            &mut self.state_graph,
+                            self.graph_style,
+                            &self.actions,
+                            &self.default_state,
+                            &self.validation_errors
+                        )
                     }
                 }
             });

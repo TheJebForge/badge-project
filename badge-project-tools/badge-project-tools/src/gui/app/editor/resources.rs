@@ -5,7 +5,7 @@ use crate::gui::app::editor::validation::ValidationError;
 use crate::gui::app::editor::{inline_image_picker, inline_validation_error, CharacterEditor, SharedInterState, IMAGE_EXTENSIONS};
 use crate::gui::app::shared::SharedString;
 use crate::gui::app::util;
-use crate::gui::app::util::{ChangeTracker, SPACING};
+use crate::gui::app::util::{inline_checkbox, inline_drag_value, ChangeTracker, SPACING};
 use egui::{CentralPanel, CollapsingHeader, ComboBox, ScrollArea, SidePanel, Ui};
 use std::path::PathBuf;
 
@@ -49,7 +49,7 @@ impl CharacterEditor {
                     .show(ui, |ui| {
                         ui.collapsing("Images", |ui| {
                             util::pair_list_ui(ui, &mut self.images, |ui, _i, key, el, tracker| {
-                                const TEXT_WIDTH: f32 = 50.0;
+                                const TEXT_WIDTH: f32 = 60.0;
 
                                 inline_validation_error(
                                     ui,
@@ -80,6 +80,22 @@ impl CharacterEditor {
                                 );
 
                                 inline_image_picker(ui, "Image:", el, &self.location, TEXT_WIDTH, tracker);
+
+                                ui.separator();
+
+                                ui.horizontal(|ui| {
+                                    ui.add_space(ui.style().spacing.item_spacing.x);
+                                    ui.label("Target Settings:".rich().size(15.0))
+                                });
+
+                                ui.add_space(SPACING);
+
+                                let mut borrowed = el.borrow_mut();
+
+                                inline_drag_value(ui, "Width:", &mut borrowed.width, TEXT_WIDTH, tracker);
+                                inline_drag_value(ui, "Height:", &mut borrowed.height, TEXT_WIDTH, tracker);
+                                inline_checkbox(ui, "Alpha:", &mut borrowed.alpha, TEXT_WIDTH, tracker);
+                                inline_checkbox(ui, "Upscale:", &mut borrowed.upscale, TEXT_WIDTH, tracker);
                             }, &mut self.tracker)
                         });
 

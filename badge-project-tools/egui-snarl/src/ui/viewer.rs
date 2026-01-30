@@ -262,6 +262,12 @@ pub trait SnarlViewer<T> {
         false
     }
 
+    /// Lets viewer declare itself as read-only
+    #[inline]
+    fn read_only(&self) -> bool {
+        false
+    }
+
     /// Show context menu for the snarl.
     ///
     /// This can be used to implement menu for adding new nodes.

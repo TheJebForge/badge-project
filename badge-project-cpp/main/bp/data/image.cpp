@@ -132,14 +132,14 @@ namespace bp::image {
         std::size_t block_start = 0;
 
         for (const auto& occlusion : occupied) {
-            if (const auto current_size = occlusion.start - block_start; current_size > size) {
+            if (const auto current_size = occlusion.start - block_start; current_size >= size) {
                 return block_start;
             }
 
             block_start = occlusion.end + 1;
         }
 
-        if (const auto current_size = IMAGE_STORAGE_SIZE - block_start; current_size > size) {
+        if (const auto current_size = IMAGE_STORAGE_SIZE - block_start; current_size >= size) {
             return block_start;
         }
 

@@ -67,18 +67,10 @@ impl InterState {
             StateImage::None => InterStateImage::None,
             StateImage::Single {
                 name,
-                width,
-                height,
-                alpha,
-                upscale,
                 preload,
                 ..
             } => InterStateImage::Single {
                 image: images.iter().find(|(k, _)| k.str_eq(&name))?.0.clone(),
-                width,
-                height,
-                alpha,
-                upscale,
                 preload,
             },
             StateImage::Animation {
@@ -100,10 +92,6 @@ impl InterState {
                     .filter_map(|frame| {
                         Some(InterSequenceFrame {
                             image: images.iter().find(|(k, _)| k.str_eq(&frame.name))?.0.clone(),
-                            width: frame.width,
-                            height: frame.height,
-                            alpha: frame.alpha,
-                            upscale: frame.upscale,
                             duration: frame.duration,
                         })
                     })
@@ -130,7 +118,7 @@ impl InterState {
         Some(InterState {
             image,
             transitions,
-            node_pos: node_pos
+            node_pos
         })
     }
 
@@ -139,15 +127,19 @@ impl InterState {
             image: match self.image {
                 InterStateImage::None => StateImage::None,
                 InterStateImage::Single {
-                    image, width, height, alpha, upscale, preload
-                } => StateImage::Single {
-                    name: image.to_string(),
-                    path: images.iter().find(|(k, _)| k == &image)?.1.borrow().path.clone(),
-                    width,
-                    height,
-                    alpha,
-                    upscale,
-                    preload,
+                    image, preload
+                } => {
+                    let image_data = images.iter().find(|(k, _)| k == &image)?.1.borrow().clone();
+
+                    StateImage::Single {
+                        name: image.to_string(),
+                        path: image_data.path,
+                        width: image_data.width,
+                        height: image_data.height,
+                        alpha: image_data.alpha,
+                        upscale: image_data.upscale,
+                        preload,
+                    }
                 },
                 InterStateImage::Animation {
                     animation, next_state, loop_count, preload
@@ -162,13 +154,15 @@ impl InterState {
                 } => StateImage::Sequence {
                     frames: frames.into_iter()
                         .filter_map(|e| {
+                            let image = images.iter().find(|(k, _)| k == &e.image)?.1.borrow().clone();
+
                             Some(SequenceFrame {
                                 name: e.image.to_string(),
-                                path: images.iter().find(|(k, _)| k == &e.image)?.1.borrow().path.clone(),
-                                width: e.width,
-                                height: e.height,
-                                alpha: e.alpha,
-                                upscale: e.upscale,
+                                path: image.path,
+                                width: image.width,
+                                height: image.height,
+                                alpha: image.alpha,
+                                upscale: image.upscale,
                                 duration: e.duration,
                             })
                         })
@@ -190,10 +184,6 @@ pub enum InterStateImage {
     None,
     Single {
         image: SharedString,
-        width: u32,
-        height: u32,
-        alpha: bool,
-        upscale: bool,
         preload: bool
     },
     Animation {
@@ -211,10 +201,6 @@ pub enum InterStateImage {
 #[derive(Clone, Debug)]
 pub struct InterSequenceFrame {
     pub image: SharedString,
-    pub width: u32,
-    pub height: u32,
-    pub alpha: bool,
-    pub upscale: bool,
     pub duration: i64
 }
 
@@ -222,10 +208,6 @@ impl Default for InterSequenceFrame {
     fn default() -> Self {
         Self {
             image: SharedString::from("None"),
-            width: 320,
-            height: 320,
-            alpha: false,
-            upscale: false,
             duration: 1_000_000,
         }
     }
@@ -248,32 +230,76 @@ impl From<InterStateTransition> for StateTransition {
     }
 }
 
-#[derive(Clone, Default)]
+#[derive(Clone)]
 pub struct LoadedImage {
     pub path: PathBuf,
     pub image: DynamicImage,
+    pub width: u32,
+    pub height: u32,
+    pub alpha: bool,
+    pub upscale: bool,
     pub handle: Option<TextureHandle>
+}
+
+impl Default for LoadedImage {
+    fn default() -> Self {
+        Self {
+            path: Default::default(),
+            image: Default::default(),
+            width: 320,
+            height: 320,
+            alpha: false,
+            upscale: false,
+            handle: None,
+        }
+    }
 }
 
 pub type SharedLoadedImage = Rc<RefCell<LoadedImage>>;
 
 pub fn find_images(map: &HashMap<String, State>, location: impl AsRef<Path>) -> Vec<(SharedString, SharedLoadedImage)> {
-    let mut found_images: Vec<(SharedString, PathBuf)> = vec![];
+    let mut found_images: Vec<(SharedString, (PathBuf, (u32, u32), bool, bool))> = vec![];
 
-    let mut add_unique = |name: &String, path: &PathBuf| {
+    let mut add_unique = |
+        name: &String,
+        path: &PathBuf,
+        width: u32,
+        height: u32,
+        alpha: bool,
+        upscale: bool
+    | {
         if !found_images.iter().any(|(k, _)| k.refer(|k| k == name)) {
-            found_images.push((name.to_string().into(), path.clone()))
+            found_images.push((
+                name.to_string().into(),
+                (path.clone(), (width, height), alpha, upscale)
+            ))
         }
     };
 
     for state in map.values() {
         match &state.image {
-            StateImage::Single { name, path, .. } => {
-                add_unique(name, path);
+            StateImage::Single {
+                name, path, width, height, alpha, upscale, ..
+            } => {
+                add_unique(
+                    name,
+                    path,
+                    *width,
+                    *height,
+                    *alpha,
+                    *upscale
+                );
             }
             StateImage::Sequence { frames, .. } => {
                 for frame in frames {
-                    add_unique(&frame.name, &frame.path)
+                    add_unique(
+                        &frame.name,
+                        &frame.path,
+                        frame.width,
+                        frame.height,
+                        frame.alpha,
+                        frame.upscale
+                    )
                 }
             }
             _ => {}
@@ -283,10 +309,15 @@ pub fn find_images(map: &HashMap<String, State>, location: impl AsRef<Path>) -> 
     let base_location = location.as_ref().to_path_buf();
 
     found_images.into_iter()
-        .map(|(k, v)| (k, Rc::new(RefCell::new(LoadedImage {
-            image: load_image_or_black(base_location.join(&v)),
-            path: v,
-            handle: None
-        }))))
+        .map(|(k, (path, (width, height), alpha, upscale))|
+            (k, Rc::new(RefCell::new(LoadedImage {
+                image: load_image_or_black(base_location.join(&path)),
+                width,
+                height,
+                path,
+                handle: None,
+                alpha,
+                upscale,
+            }))))
         .collect()
 }

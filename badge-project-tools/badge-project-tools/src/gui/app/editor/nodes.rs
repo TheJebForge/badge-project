@@ -110,7 +110,7 @@ pub struct StateViewer<'a> {
     validation_errors: &'a Vec<ValidationError>,
 }
 
-const WIRE_COLOR: Color32 = Color32::from_rgb(190, 190, 190);
+pub const WIRE_COLOR: Color32 = Color32::from_rgb(190, 190, 190);
 const SELECTED_COLOR: Color32 = Color32::CYAN;
 const SELECTED_BG_COLOR: Color32 = Color32::from_rgb(0, 70, 70);
 const ERROR_BG_COLOR: Color32 = Color32::from_rgb(70, 0, 0);
@@ -460,6 +460,10 @@ impl SnarlViewer<StateNode> for StateViewer<'_> {
         self.tracker.mark_change();
     }
 
+    fn drop_outputs(&mut self, _: &OutPin, _: &mut Snarl<StateNode>) {}
+
+    fn drop_inputs(&mut self, _: &InPin, _: &mut Snarl<StateNode>) {}
+
     fn draw_background(&mut self, background: Option<&BackgroundPattern>, viewport: &Rect, snarl_style: &SnarlStyle, style: &Style, painter: &Painter, _snarl: &Snarl<StateNode>) {
         if let Some(background) = background {
             background.draw(viewport, snarl_style, style, painter);
@@ -473,6 +477,7 @@ impl SnarlViewer<StateNode> for StateViewer<'_> {
     fn background_click(&mut self, _rect: Rect, _snarl: &mut Snarl<StateNode>) {
         *self.selection = ViewerSelection::None
     }
+
 
 
 }
@@ -571,10 +576,6 @@ impl CharacterEditor {
                                         {
                                             *image = InterStateImage::Single {
                                                 image: SharedString::from("None"),
-                                                width: 320,
-                                                height: 320,
-                                                alpha: false,
-                                                upscale: false,
                                                 preload: false,
                                             };
                                             self.tracker.mark_change();
@@ -612,10 +613,6 @@ impl CharacterEditor {
                                 InterStateImage::None => {}
                                 InterStateImage::Single {
                                     image,
-                                    width,
-                                    height,
-                                    alpha,
-                                    upscale,
                                     preload,
                                 } => {
                                     inline_image_resource_picker(
@@ -640,10 +637,6 @@ impl CharacterEditor {
                                         },
                                         TEXT_WIDTH
                                     );
-                                    inline_drag_value(ui, "Width:", width, TEXT_WIDTH, &mut self.tracker);
-                                    inline_drag_value(ui, "Height:", height, TEXT_WIDTH, &mut self.tracker);
-                                    inline_checkbox(ui, "Alpha:", alpha, TEXT_WIDTH, &mut self.tracker);
-                                    inline_checkbox(ui, "Upscale:", upscale, TEXT_WIDTH, &mut self.tracker);
                                     inline_checkbox(ui, "Preload:", preload, TEXT_WIDTH, &mut self.tracker);
                                 }
                                 InterStateImage::Animation {
@@ -726,35 +719,6 @@ impl CharacterEditor {
                                                     state.0.str_eq(name) && index == *err_index
                                                 },
                                                 TEXT_WIDTH
-                                            );
-
-                                            inline_drag_value(
-                                                ui,
-                                                "Width:",
-                                                &mut frame.width,
-                                                TEXT_WIDTH,
-                                                tracker
-                                            );
-                                            inline_drag_value(
-                                                ui,
-                                                "Height:",
-                                                &mut frame.height,
-                                                TEXT_WIDTH,
-                                                tracker
-                                            );
-                                            inline_checkbox(
-                                                ui,
-                                                "Alpha:",
-                                                &mut frame.alpha,
-                                                TEXT_WIDTH,
-                                                tracker
-                                            );
-                                            inline_checkbox(
-                                                ui,
-                                                "Upscale:",
-                                                &mut frame.upscale,
-                                                TEXT_WIDTH,
-                                                tracker
                                             );
                                             inline_duration_value(
                                                 ui,

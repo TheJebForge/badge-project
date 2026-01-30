@@ -6,6 +6,7 @@ use crate::gui::app::editor::CharacterEditor;
 use crate::gui::app::editor::intermediate::{InterActionType, InterStateImage};
 
 #[derive(Clone, Debug, Display)]
+#[derive(PartialEq, Eq)]
 pub enum ValidationError {
     #[strum(to_string = "Duplicate state '{0}'!")]
     DuplicateState(String),

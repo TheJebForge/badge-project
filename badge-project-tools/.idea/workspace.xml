@@ -14,16 +14,20 @@
     </cargoProject>
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="a1adc736-dd13-4dc0-93b4-2fe3353375b1" name="Changes" comment="Most of GUI work is done">
+    <list default="true" id="a1adc736-dd13-4dc0-93b4-2fe3353375b1" name="Changes" comment="Export button and better handling of images">
+      <change afterPath="$PROJECT_DIR$/badge-project-tools/src/gui/app/editor/simulator.rs" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/badge-project-tools/src/character/mod.rs" beforeDir="false" afterPath="$PROJECT_DIR$/badge-project-tools/src/character/mod.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/Cargo.lock" beforeDir="false" afterPath="$PROJECT_DIR$/Cargo.lock" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/badge-project-tools/Cargo.toml" beforeDir="false" afterPath="$PROJECT_DIR$/badge-project-tools/Cargo.toml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/badge-project-tools/src/character/repr.rs" beforeDir="false" afterPath="$PROJECT_DIR$/badge-project-tools/src/character/repr.rs" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/badge-project-tools/src/gui/app/editor/intermediate.rs" beforeDir="false" afterPath="$PROJECT_DIR$/badge-project-tools/src/gui/app/editor/intermediate.rs" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/badge-project-tools/src/gui/app/editor/mod.rs" beforeDir="false" afterPath="$PROJECT_DIR$/badge-project-tools/src/gui/app/editor/mod.rs" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/badge-project-tools/src/gui/app/editor/nodes.rs" beforeDir="false" afterPath="$PROJECT_DIR$/badge-project-tools/src/gui/app/editor/nodes.rs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/badge-project-tools/src/gui/app/util.rs" beforeDir="false" afterPath="$PROJECT_DIR$/badge-project-tools/src/gui/app/util.rs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/badge-project-tools/src/main.rs" beforeDir="false" afterPath="$PROJECT_DIR$/badge-project-tools/src/main.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/badge-project-tools/src/gui/app/editor/resources.rs" beforeDir="false" afterPath="$PROJECT_DIR$/badge-project-tools/src/gui/app/editor/resources.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/badge-project-tools/src/gui/app/editor/validation.rs" beforeDir="false" afterPath="$PROJECT_DIR$/badge-project-tools/src/gui/app/editor/validation.rs" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/badge-project-tools/test.json" beforeDir="false" afterPath="$PROJECT_DIR$/badge-project-tools/test.json" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/badge-project-tools/test.tar" beforeDir="false" afterPath="$PROJECT_DIR$/badge-project-tools/test.tar" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/egui-snarl/src/ui.rs" beforeDir="false" afterPath="$PROJECT_DIR$/egui-snarl/src/ui.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/egui-snarl/src/ui/viewer.rs" beforeDir="false" afterPath="$PROJECT_DIR$/egui-snarl/src/ui/viewer.rs" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -136,7 +140,8 @@
       <workItem from="1769378016589" duration="7221000" />
       <workItem from="1769413871056" duration="23695000" />
       <workItem from="1769461843178" duration="8759000" />
-      <workItem from="1769678025972" duration="14575000" />
+      <workItem from="1769678025972" duration="14633000" />
+      <workItem from="1769757847648" duration="27313000" />
     </task>
     <task id="LOCAL-00001" summary="Most of GUI work is done">
       <option name="closed" value="true" />
@@ -146,7 +151,15 @@
       <option name="project" value="LOCAL" />
       <updated>1769470537851</updated>
     </task>
-    <option name="localTasksCounter" value="2" />
+    <task id="LOCAL-00002" summary="Export button and better handling of images">
+      <option name="closed" value="true" />
+      <created>1769700456173</created>
+      <option name="number" value="00002" />
+      <option name="presentableId" value="LOCAL-00002" />
+      <option name="project" value="LOCAL" />
+      <updated>1769700456174</updated>
+    </task>
+    <option name="localTasksCounter" value="3" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -180,6 +193,7 @@
       <path value="$PROJECT_DIR$/egui-snarl" />
     </ignored-roots>
     <MESSAGE value="Most of GUI work is done" />
-    <option name="LAST_COMMIT_MESSAGE" value="Most of GUI work is done" />
+    <MESSAGE value="Export button and better handling of images" />
+    <option name="LAST_COMMIT_MESSAGE" value="Export button and better handling of images" />
   </component>
 </project>

@@ -1107,7 +1107,7 @@ where
             if let Some(v) = response.node_moved {
                 node_moved = Some(v);
             }
-            if let Some(v) = response.pin_hovered {
+            if let Some(v) = response.pin_hovered && !viewer.read_only() {
                 pin_hovered = Some(v);
             }
             drag_released |= response.drag_released;
@@ -1208,7 +1208,7 @@ where
     }
 
     // Remove hovered wire by second click
-    if hovered_wire_disconnect && let Some(wire) = hovered_wire {
+    if hovered_wire_disconnect && let Some(wire) = hovered_wire && !viewer.read_only()  {
         let out_pin = OutPin::new(snarl, wire.out_pin);
         let in_pin = InPin::new(snarl, wire.in_pin);
         viewer.disconnect(&out_pin, &in_pin, snarl);
@@ -1536,7 +1536,7 @@ where
                             return;
                         }
                     }
-                } else {
+                } else if !viewer.read_only() {
                     snarl_state.start_new_wire_in(in_pin.id);
                 }
             }
@@ -1696,7 +1696,7 @@ where
                             return;
                         }
                     }
-                } else {
+                } else if !viewer.read_only() {
                     snarl_state.start_new_wire_out(out_pin.id);
                 }
             }

@@ -177,14 +177,14 @@ impl Default for Animation {
     }
 }
 
-#[derive(Deserialize, Serialize, Copy, Clone, Debug, Default, EnumIter, Display, PartialEq, Eq)]
+#[derive(Deserialize, Serialize, Copy, Clone, Debug, Default, EnumIter, Display, PartialEq, Eq, EnumIs)]
 pub enum AnimationMode {
     #[default]
     FromSDCard,
     FromRAM
 }
 
-#[derive(Deserialize, Serialize, Copy, Clone, Debug, Default, EnumIter, Display, PartialEq, Eq)]
+#[derive(Deserialize, Serialize, Copy, Clone, Debug, Default, EnumIter, Display, PartialEq, Eq, EnumIs)]
 pub enum SequenceMode {
     LoadAll,
     #[default]
