@@ -319,7 +319,7 @@ pub fn inline_image_picker(
 
     ui.vertical(|ui| {
         ui.horizontal(|ui| {
-            util::inline_style_label(ui, label, width);
+            inline_style_label(ui, label, width);
             if ui.button("Pick Image").clicked() {
                 pick_image_file(&mut value, tracker, location)
             }
@@ -386,8 +386,10 @@ pub fn inline_image_resource_picker(
         });
 
         let index = ui.memory_mut(|mem| {
-            let index = mem.data.get_persisted_mut_or_insert_with::<Option<usize>>(
-                ui.id().with(&value),
+            let id = ui.id().with(&value);
+
+            let index = mem.data.get_temp_mut_or_insert_with::<Option<usize>>(
+                id,
                 || {
                     Some(images.iter().enumerate().find(|(_, (k, _))| k == value)?.0)
                 }
@@ -402,8 +404,18 @@ pub fn inline_image_resource_picker(
                             return None;
                         }
                     }
+                } else {
+                    if let Some((new_index, _)) = images.iter().enumerate().find(|(_, (k, _))| k == value) {
+                        *index = new_index;
+                    }
+                }
 
-                    return Some(*index)
+                return Some(*index)
+            } else {
+                if let Some((new_index, _)) = images.iter().enumerate().find(|(_, (k, _))| k == value) {
+                    println!("{} got new index!", value);
+                    mem.data.insert_temp(id, Some(new_index));
+                    return Some(new_index)
                 }
             }
 

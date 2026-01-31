@@ -15,19 +15,9 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="a1adc736-dd13-4dc0-93b4-2fe3353375b1" name="Changes" comment="Export button and better handling of images">
-      <change afterPath="$PROJECT_DIR$/badge-project-tools/src/gui/app/editor/simulator.rs" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/Cargo.lock" beforeDir="false" afterPath="$PROJECT_DIR$/Cargo.lock" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/badge-project-tools/Cargo.toml" beforeDir="false" afterPath="$PROJECT_DIR$/badge-project-tools/Cargo.toml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/badge-project-tools/src/character/repr.rs" beforeDir="false" afterPath="$PROJECT_DIR$/badge-project-tools/src/character/repr.rs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/badge-project-tools/src/gui/app/editor/intermediate.rs" beforeDir="false" afterPath="$PROJECT_DIR$/badge-project-tools/src/gui/app/editor/intermediate.rs" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/badge-project-tools/src/gui/app/editor/mod.rs" beforeDir="false" afterPath="$PROJECT_DIR$/badge-project-tools/src/gui/app/editor/mod.rs" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/badge-project-tools/src/gui/app/editor/nodes.rs" beforeDir="false" afterPath="$PROJECT_DIR$/badge-project-tools/src/gui/app/editor/nodes.rs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/badge-project-tools/src/gui/app/editor/resources.rs" beforeDir="false" afterPath="$PROJECT_DIR$/badge-project-tools/src/gui/app/editor/resources.rs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/badge-project-tools/src/gui/app/editor/validation.rs" beforeDir="false" afterPath="$PROJECT_DIR$/badge-project-tools/src/gui/app/editor/validation.rs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/badge-project-tools/test.json" beforeDir="false" afterPath="$PROJECT_DIR$/badge-project-tools/test.json" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/egui-snarl/src/ui.rs" beforeDir="false" afterPath="$PROJECT_DIR$/egui-snarl/src/ui.rs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/egui-snarl/src/ui/viewer.rs" beforeDir="false" afterPath="$PROJECT_DIR$/egui-snarl/src/ui/viewer.rs" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -142,6 +132,7 @@
       <workItem from="1769461843178" duration="8759000" />
       <workItem from="1769678025972" duration="14633000" />
       <workItem from="1769757847648" duration="27313000" />
+      <workItem from="1769862485884" duration="687000" />
     </task>
     <task id="LOCAL-00001" summary="Most of GUI work is done">
       <option name="closed" value="true" />

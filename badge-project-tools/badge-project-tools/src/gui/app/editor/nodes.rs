@@ -405,6 +405,8 @@ impl SnarlViewer<StateNode> for StateViewer<'_> {
             snarl.remove_node(node);
             self.states.retain(|e| e.0 != name);
 
+            *self.selection = ViewerSelection::None;
+
             self.tracker.mark_change();
         }
     }
