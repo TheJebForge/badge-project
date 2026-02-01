@@ -7,7 +7,7 @@ mod simulator;
 use crate::character::process_character_archive;
 use crate::character::repr::{Animation, Character, State};
 use crate::character::util::AsRichText;
-use crate::gui::app::editor::intermediate::{find_images, InterAction, InterState, LoadedImage, SharedInterState, SharedLoadedImage};
+use crate::gui::app::editor::intermediate::{find_images, InterAction, InterSequence, InterState, LoadedImage, SharedInterState, SharedLoadedImage};
 use crate::gui::app::editor::nodes::{snarl_from_states, snarl_style, ViewerSelection};
 use crate::gui::app::editor::simulator::{simulator_ui, SimulatorState};
 use crate::gui::app::editor::validation::ValidationError;
@@ -38,6 +38,7 @@ pub struct CharacterEditor {
     species: String,
     default_state: SharedString,
     images: Vec<(SharedString, SharedLoadedImage)>,
+    sequences: Vec<(SharedString, InterSequence)>,
     animations: Vec<(SharedString, Animation)>,
     actions: Vec<(String, InterAction)>,
     states: Vec<(SharedString, SharedInterState)>,
@@ -73,6 +74,8 @@ impl CharacterEditor {
         let state_names = char.states.keys()
             .map(|k| k.clone().into())
             .collect::<Vec<SharedString>>();
+        
+        let mut sequences = vec![];
 
         let states = char.states.into_iter()
             .filter_map(|(k, v)| Some((
@@ -81,6 +84,7 @@ impl CharacterEditor {
                     v,
                     &state_names,
                     &images,
+                    &mut sequences,
                     &animations,
                 )?))
             )))
@@ -101,6 +105,7 @@ impl CharacterEditor {
             default_state: states.iter().find(|(k, _)| k.str_eq(&char.default_state))
                 .or_else(|| states.first()).unwrap().0.clone(),
             images,
+            sequences,
             animations,
             actions,
             state_graph: snarl_from_states(&states),
@@ -144,7 +149,7 @@ impl CharacterEditor {
             default_state: self.default_state.to_string(),
             states: self.states.iter()
                 .filter_map(|(k, v)| Some(
-                    (k.to_string(), v.borrow().clone().into_state(&self.images)?)
+                    (k.to_string(), v.borrow().clone().into_state(&self.images, &self.sequences)?)
                 ))
                 .collect(),
             animations: self.animations.iter()
@@ -218,7 +223,7 @@ impl CharacterEditor {
 
         let char = self.as_repr();
 
-        process_character_archive(char, picked_file)
+        process_character_archive(char, picked_file, &self.location)
     }
 
     pub fn export(&self) {
@@ -568,6 +573,7 @@ impl GuiPage for CharacterEditor {
                             ui,
                             &mut self.simulator_state,
                             &self.images,
+                            &self.sequences,
                             &self.animations,
                             &self.states,
                             &mut self.state_graph,

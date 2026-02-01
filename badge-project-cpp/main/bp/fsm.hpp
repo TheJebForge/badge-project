@@ -54,6 +54,7 @@ namespace bp {
         // UI Objects
         lv_obj_t* screen_obj = nullptr;
         lv_obj_t* char_name_obj = nullptr;
+        lv_obj_t* char_species_obj = nullptr;
         lv_obj_t* image_obj = nullptr;
         lv_obj_t* progress_box_obj = nullptr;
         lv_obj_t* progress_bar_obj = nullptr;

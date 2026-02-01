@@ -1,8 +1,6 @@
 use crate::character::repr::{Animation, SequenceMode};
 use crate::character::util::AsRichText;
-use crate::gui::app::editor::intermediate::{
-    InterAction, InterActionType, InterStateImage, SharedInterState, SharedLoadedImage,
-};
+use crate::gui::app::editor::intermediate::{InterAction, InterActionType, InterSequence, InterStateImage, SharedInterState, SharedLoadedImage};
 use crate::gui::app::editor::nodes::{StateNode, WIRE_COLOR};
 use crate::gui::app::editor::validation::ValidationError;
 use crate::gui::app::shared::SharedString;
@@ -25,6 +23,7 @@ pub fn simulator_ui(
     ui: &mut Ui,
     simulator_state: &mut Option<SimulatorState>,
     images: &Vec<(SharedString, SharedLoadedImage)>,
+    sequences: &Vec<(SharedString, InterSequence)>,
     animations: &Vec<(SharedString, Animation)>,
     states: &Vec<(SharedString, SharedInterState)>,
     state_graph: &mut Snarl<(SharedString, SharedInterState)>,
@@ -37,6 +36,7 @@ pub fn simulator_ui(
         let exit_requested = Simulator {
             sim_state: state,
             images,
+            sequences,
             animations,
             actions,
             states,
@@ -79,6 +79,7 @@ pub fn simulator_ui(
 pub struct Simulator<'a> {
     pub sim_state: &'a mut SimulatorState,
     pub images: &'a Vec<(SharedString, SharedLoadedImage)>,
+    pub sequences: &'a Vec<(SharedString, InterSequence)>,
     pub animations: &'a Vec<(SharedString, Animation)>,
     pub actions: &'a Vec<(String, InterAction)>,
     pub states: &'a Vec<(SharedString, SharedInterState)>,
@@ -314,63 +315,71 @@ impl Simulator<'_> {
                     self.sim_state.prepared_images.push(allocation)
                 }
             }
-            InterStateImage::Sequence { mode, frames } => match mode {
-                SequenceMode::LoadAll => {
-                    for frame in frames {
-                        let Some((_, image)) = self.images.iter().find(|(k, _)| k == &frame.image)
-                        else {
-                            continue;
-                        };
+            InterStateImage::Sequence { mode, sequence } => {
+                let Some((_, sequence)) = self.sequences.iter()
+                    .find(|(k, _)| k == sequence) else {
+                    return true;
+                };
 
-                        let image = image.borrow();
+                match mode {
+                    SequenceMode::LoadAll => {
+                        for frame in &sequence.frames {
+                            let Some((_, image)) = self.images.iter()
+                                .find(|(k, _)| k == &frame.image)
+                            else {
+                                continue;
+                            };
 
-                        let size = calc_required_space(
-                            image.width,
-                            image.height,
-                            image.alpha,
-                            image.upscale,
-                        );
+                            let image = image.borrow();
 
-                        let Some(allocation) = self.sim_state.allocator.allocate(size) else {
-                            return false;
-                        };
+                            let size = calc_required_space(
+                                image.width,
+                                image.height,
+                                image.alpha,
+                                image.upscale,
+                            );
 
-                        self.sim_state.prepared_images.push(allocation)
-                    }
-                }
-                SequenceMode::LoadEach => {
-                    let mut largest_size = 0_u64;
+                            let Some(allocation) = self.sim_state.allocator.allocate(size) else {
+                                return false;
+                            };
 
-                    for frame in frames {
-                        let Some((_, image)) = self.images.iter().find(|(k, _)| k == &frame.image)
-                        else {
-                            continue;
-                        };
-
-                        let image = image.borrow();
-
-                        let size = calc_required_space(
-                            image.width,
-                            image.height,
-                            image.alpha,
-                            image.upscale,
-                        );
-
-                        if largest_size < size {
-                            largest_size = size
+                            self.sim_state.prepared_images.push(allocation)
                         }
                     }
+                    SequenceMode::LoadEach => {
+                        let mut largest_size = 0_u64;
 
-                    for _ in 0..2 {
-                        let Some(allocation) = self.sim_state.allocator.allocate(largest_size)
-                        else {
-                            return false;
-                        };
+                        for frame in &sequence.frames {
+                            let Some((_, image)) = self.images.iter().find(|(k, _)| k == &frame.image)
+                            else {
+                                continue;
+                            };
 
-                        self.sim_state.prepared_images.push(allocation)
+                            let image = image.borrow();
+
+                            let size = calc_required_space(
+                                image.width,
+                                image.height,
+                                image.alpha,
+                                image.upscale,
+                            );
+
+                            if largest_size < size {
+                                largest_size = size
+                            }
+                        }
+
+                        for _ in 0..2 {
+                            let Some(allocation) = self.sim_state.allocator.allocate(largest_size)
+                            else {
+                                return false;
+                            };
+
+                            self.sim_state.prepared_images.push(allocation)
+                        }
                     }
+                    _ => {}
                 }
-                _ => {}
             },
         }
 
@@ -483,9 +492,14 @@ impl Simulator<'_> {
                         self.sim_state.current_image = self.sim_state.loaded_images.get(0).cloned();
                     }
                 }
-                InterStateImage::Sequence { mode, frames } => {
+                InterStateImage::Sequence { mode, sequence } => {
+                    let Some((_, sequence)) = self.sequences.iter()
+                        .find(|(k, _)| k == sequence) else {
+                        return;
+                    };
+
                     if mode.is_preload() {
-                        let Some(first_frame) = frames.first() else {
+                        let Some(first_frame) = sequence.frames.first() else {
                             return;
                         };
 
@@ -560,12 +574,17 @@ impl Simulator<'_> {
                             .collect::<Option<Vec<_>>>()?,
                     );
                 }
-                InterStateImage::Sequence { frames, mode } => {
+                InterStateImage::Sequence { sequence, mode } => {
                     if *mode != SequenceMode::Preload {
                         continue;
                     }
 
-                    for frame in frames {
+                    let Some((_, sequence)) = self.sequences.iter()
+                        .find(|(k, _)| k == sequence) else {
+                        continue;
+                    };
+
+                    for frame in &sequence.frames {
                         let Some((_, image_data)) =
                             self.images.iter().find(|(k, _)| k == &frame.image)
                         else {

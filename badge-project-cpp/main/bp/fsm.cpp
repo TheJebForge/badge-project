@@ -151,9 +151,17 @@ void CharacterFSM::create_ui() {
         lv_obj_set_width(header, lv_pct(100));
         lv_obj_set_style_border_width(header, 0, 0);
 
+        lv_obj_t* nickname_label = lv_label_create(header);
+        lv_obj_set_style_text_font(nickname_label, &lv_font_montserrat_36, 0);
+        lv_label_set_text(nickname_label, "TheJebForge");
+
         char_name_obj = lv_label_create(header);
         lv_obj_set_style_text_font(char_name_obj, &lv_font_montserrat_36, 0);
-        lv_label_set_text(char_name_obj, character_data.name.c_str());
+        lv_label_set_text(char_name_obj, std::format("o.c. {}", character_data.name).c_str());
+
+        char_species_obj = lv_label_create(header);
+        lv_obj_set_style_text_font(char_species_obj, &lv_font_montserrat_24, 0);
+        lv_label_set_text(char_species_obj, character_data.species.c_str());
 
         lv_obj_t* image_button = lv_button_create(screen_obj);
         lv_obj_set_pos(image_button, 0, DISPLAY_HEIGHT - DISPLAY_WIDTH);
@@ -216,10 +224,11 @@ void CharacterFSM::load_character_sl(const std::string& name) {
 
     switch_state_unchecked(character_data.default_state);
 
-    if (char_name_obj != nullptr) {
+    if (char_name_obj != nullptr && char_species_obj != nullptr) {
         LVGLLockGuard guard(0);
 
-        lv_label_set_text(char_name_obj, character_data.name.c_str());
+        lv_label_set_text(char_name_obj, std::format("o.c. {}", character_data.name).c_str());
+        lv_label_set_text(char_species_obj, character_data.species.c_str());
     }
 
     bp_characteristics->set_character_info(

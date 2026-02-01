@@ -1,9 +1,9 @@
-use std::fs;
-use std::fs::File;
-use std::path::{Path, PathBuf};
-use tar::{Builder, Header};
 use crate::character::repr::{AnimationFrameSource, BinaryRepr, Character, StateImage};
 use crate::image::encode_image_data;
+use std::fs::File;
+use std::path::{Path, PathBuf};
+use std::{env, fs};
+use tar::{Builder, Header};
 
 pub mod repr;
 pub mod util;
@@ -28,7 +28,7 @@ fn append_vec<P: AsRef<Path>, T: std::io::Write>(builder: &mut tar::Builder<T>, 
     builder.append_data(&mut header, path, data)
 }
 
-fn save_image(char_path: impl AsRef<Path>, mut archive: &mut Builder<File>, name: &String, path: &PathBuf, width: u32, height: u32, alpha: bool, upscale: bool) -> anyhow::Result<()> {
+fn save_image(char_path: impl AsRef<Path>, mut archive: &mut Builder<File>, name: &String, location: &Path, path: &Path, width: u32, height: u32, alpha: bool, upscale: bool) -> anyhow::Result<()> {
     let real_width = if upscale {
         width / 2
     } else {
@@ -41,7 +41,7 @@ fn save_image(char_path: impl AsRef<Path>, mut archive: &mut Builder<File>, name
         height
     };
 
-    let file = fs::read(path)?;
+    let file = fs::read(location.join(path))?;
     append_vec(
         &mut archive,
         PathBuf::from(char_path.as_ref()).join("images").join(format!("{name}.bin")),
@@ -52,10 +52,12 @@ fn save_image(char_path: impl AsRef<Path>, mut archive: &mut Builder<File>, name
 
 pub fn process_character_cli(cli: CharacterCli) -> anyhow::Result<()> {
     let char: Character = serde_json::from_str(&fs::read_to_string(cli.input_file)?)?;
-    process_character_archive(char, cli.output_file)
+    process_character_archive(char, cli.output_file, env::current_dir()?)
 }
 
-pub fn process_character_archive(char: Character, path: impl AsRef<Path>) -> anyhow::Result<()> {
+pub fn process_character_archive(char: Character, path: impl AsRef<Path>, location: impl AsRef<Path>) -> anyhow::Result<()> {
+    let location = location.as_ref();
+
     let file = File::create(path)?;
 
     let char_path = Path::new("characters").join(&char.id);
@@ -76,7 +78,7 @@ pub fn process_character_archive(char: Character, path: impl AsRef<Path>) -> any
             upscale,
             ..
         } = &state.image {
-            save_image(&char_path, &mut archive, name, path, *width, *height, *alpha, *upscale)?;
+            save_image(&char_path, &mut archive, name, location, path, *width, *height, *alpha, *upscale)?;
         }
 
         if let StateImage::Sequence {
@@ -86,7 +88,7 @@ pub fn process_character_archive(char: Character, path: impl AsRef<Path>) -> any
             let frames_path = state_path.join("frames");
             for (index, frame) in frames.iter().enumerate() {
                 // Save image file
-                save_image(&char_path, &mut archive, &frame.name, &frame.path, frame.width, frame.height, frame.alpha, frame.upscale)?;
+                save_image(&char_path, &mut archive, &frame.name, location, &frame.path, frame.width, frame.height, frame.alpha, frame.upscale)?;
 
                 // Save frame
                 let frame_path = frames_path.join(format!("{index}.bin"));
@@ -112,6 +114,8 @@ pub fn process_character_archive(char: Character, path: impl AsRef<Path>) -> any
             AnimationFrameSource::Indexed {
                 count, folder, extension
             } => {
+                let folder = location.join(folder);
+
                 for index in 1..=*count {
                     let image = fs::read(
                         folder.join(format!("{index}.{}", extension))
@@ -127,7 +131,7 @@ pub fn process_character_archive(char: Character, path: impl AsRef<Path>) -> any
 
             AnimationFrameSource::List(list) => {
                 for (index, path) in list.iter().enumerate() {
-                    let image = fs::read(path)?;
+                    let image = fs::read(location.join(path))?;
 
                     append_vec(
                         &mut archive,

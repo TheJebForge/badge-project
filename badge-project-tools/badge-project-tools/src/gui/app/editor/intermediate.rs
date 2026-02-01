@@ -1,6 +1,6 @@
 use crate::character::repr::{Action, ActionType, Animation, SequenceFrame, SequenceMode, State, StateImage, StateTransition, StateTransitionTrigger};
 use crate::gui::app::shared::{MutableStringScope, SharedString};
-use crate::gui::app::util::load_image_or_black;
+use crate::gui::app::util::{load_image_or_black, pick_unique_name};
 use egui::{pos2, Pos2, TextureHandle};
 use image::DynamicImage;
 use std::cell::RefCell;
@@ -61,6 +61,7 @@ impl InterState {
         state: State,
         names: &Vec<SharedString>,
         images: &Vec<(SharedString, SharedLoadedImage)>,
+        sequences: &mut Vec<(SharedString, InterSequence)>,
         animations: &Vec<(SharedString, Animation)>
     ) -> Option<InterState> {
         let image = match state.image {
@@ -85,18 +86,42 @@ impl InterState {
                 preload,
             },
             StateImage::Sequence {
+                name,
                 frames,
                 mode
-            } => InterStateImage::Sequence {
-                frames: frames.into_iter()
-                    .filter_map(|frame| {
-                        Some(InterSequenceFrame {
-                            image: images.iter().find(|(k, _)| k.str_eq(&frame.name))?.0.clone(),
-                            duration: frame.duration,
-                        })
-                    })
-                    .collect::<Vec<_>>(),
-                mode,
+            } => {
+                let from_frames = |frames: Vec<SequenceFrame>| {
+                    InterSequence {
+                        frames: frames.into_iter()
+                            .filter_map(|frame| {
+                                Some(InterSequenceFrame {
+                                    image: images.iter().find(|(k, _)| k.str_eq(&frame.name))?.0.clone(),
+                                    duration: frame.duration,
+                                })
+                            })
+                            .collect::<Vec<_>>()
+                    }
+                };
+                
+                let sequence = if let Some(name) = name {
+                    if let Some((existing, _)) = sequences.iter()
+                        .find(|(k, _)| k.str_eq(&name)) {
+                        existing.clone()
+                    } else {
+                        let new_name = SharedString::from(name);
+                        sequences.push((new_name.clone(), from_frames(frames)));
+                        new_name
+                    }
+                } else {
+                    let new_name = pick_unique_name("unknown".to_string(), sequences);
+                    sequences.push((new_name.clone(), from_frames(frames)));
+                    new_name
+                };
+                
+                InterStateImage::Sequence {
+                    sequence,
+                    mode,
+                }
             }
         };
 
@@ -122,7 +147,11 @@ impl InterState {
         })
     }
 
-    pub fn into_state(self, images: &Vec<(SharedString, SharedLoadedImage)>) -> Option<State> {
+    pub fn into_state(
+        self,
+        images: &Vec<(SharedString, SharedLoadedImage)>,
+        sequences: &Vec<(SharedString, InterSequence)>
+    ) -> Option<State> {
         Some(State {
             image: match self.image {
                 InterStateImage::None => StateImage::None,
@@ -150,24 +179,30 @@ impl InterState {
                     preload,
                 },
                 InterStateImage::Sequence {
-                    frames, mode
-                } => StateImage::Sequence {
-                    frames: frames.into_iter()
-                        .filter_map(|e| {
-                            let image = images.iter().find(|(k, _)| k == &e.image)?.1.borrow().clone();
+                    sequence, mode
+                } => {
+                    let sequence_data = sequences.iter()
+                        .find(|(k, _)| k == &sequence)?.1.clone();
 
-                            Some(SequenceFrame {
-                                name: e.image.to_string(),
-                                path: image.path,
-                                width: image.width,
-                                height: image.height,
-                                alpha: image.alpha,
-                                upscale: image.upscale,
-                                duration: e.duration,
+                    StateImage::Sequence {
+                        name: Some(sequence.to_string()),
+                        frames: sequence_data.frames.into_iter()
+                            .filter_map(|e| {
+                                let image = images.iter().find(|(k, _)| k == &e.image)?.1.borrow().clone();
+
+                                Some(SequenceFrame {
+                                    name: e.image.to_string(),
+                                    path: image.path,
+                                    width: image.width,
+                                    height: image.height,
+                                    alpha: image.alpha,
+                                    upscale: image.upscale,
+                                    duration: e.duration,
+                                })
                             })
-                        })
-                        .collect(),
-                    mode,
+                            .collect(),
+                        mode,
+                    }
                 }
             },
             transitions: self.transitions.into_iter()
@@ -193,9 +228,16 @@ pub enum InterStateImage {
         preload: bool
     },
     Sequence {
-        frames: Vec<InterSequenceFrame>,
+        sequence: SharedString,
         mode: SequenceMode
     }
+}
+
+
+#[derive(Clone, Debug)]
+#[derive(Default)]
+pub struct InterSequence {
+    pub frames: Vec<InterSequenceFrame>
 }
 
 #[derive(Clone, Debug)]

@@ -1,9 +1,10 @@
 use crate::character::repr::StateTransitionTrigger;
 use crate::character::util::AsRichText;
 use crate::gui::app::editor::intermediate::{InterState, InterStateImage, InterStateTransition, SharedInterState, SharedInterStateTransition};
+use crate::gui::app::editor::validation::ValidationError;
 use crate::gui::app::editor::{inline_image_resource_picker, inline_validation_error, CharacterEditor};
 use crate::gui::app::shared::{MutableStringScope, SharedString};
-use crate::gui::app::util::{inline_checkbox, inline_drag_value, inline_duration_value, inline_enum_edit, inline_resource_picker, inline_style_label, inline_text_edit, pick_unique_name, vec_ui, ChangeTracker};
+use crate::gui::app::util::{inline_checkbox, inline_drag_value, inline_duration_value, inline_enum_edit, inline_resource_picker, inline_style_label, inline_text_edit, pick_unique_name, ChangeTracker};
 use eframe::emath::{Pos2, Rect};
 use eframe::epaint::Shape;
 use egui::{vec2, Button, CentralPanel, Color32, ComboBox, Frame, Id, Painter, ScrollArea, SidePanel, Stroke, Style, Ui};
@@ -14,7 +15,6 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
 use strum::EnumIs;
-use crate::gui::app::editor::validation::ValidationError;
 
 pub type StateNode = (SharedString, SharedInterState);
 
@@ -601,7 +601,7 @@ impl CharacterEditor {
                                             .clicked()
                                         {
                                             *image = InterStateImage::Sequence {
-                                                frames: vec![],
+                                                sequence: SharedString::from("None"),
                                                 mode: Default::default(),
                                             };
                                             self.tracker.mark_change();
@@ -694,43 +694,22 @@ impl CharacterEditor {
                                     inline_drag_value(ui, "Loop Count:", loop_count, TEXT_WIDTH, &mut self.tracker);
                                     inline_checkbox(ui, "Preload:", preload, TEXT_WIDTH, &mut self.tracker);
                                 }
-                                InterStateImage::Sequence { frames, mode } => {
+                                InterStateImage::Sequence { sequence, mode } => {
                                     inline_enum_edit(ui, "Mode:", mode, TEXT_WIDTH, &mut self.tracker);
-                                    ui.collapsing("Frames", |ui| {
-                                        let images = &mut self.images;
+                                    inline_resource_picker(ui, "Sequence:", sequence, &self.sequences, TEXT_WIDTH, &mut self.tracker);
+                                    inline_validation_error(
+                                        ui,
+                                        &self.validation_errors,
+                                        "Invalid sequence!",
+                                        |err| {
+                                            let ValidationError::InvalidSequenceInState(name) = err else {
+                                                return false;
+                                            };
 
-                                        vec_ui(ui, frames, images, |ui, index, frame, images, tracker| {
-                                            inline_image_resource_picker(
-                                                ui,
-                                                "Image:",
-                                                &mut frame.image,
-                                                images,
-                                                &self.location,
-                                                TEXT_WIDTH,
-                                                tracker
-                                            );
-                                            inline_validation_error(
-                                                ui,
-                                                &self.validation_errors,
-                                                "Invalid image!",
-                                                |err| {
-                                                    let ValidationError::InvalidImageInSequenceFrame(name, err_index) = err else {
-                                                        return false;
-                                                    };
-
-                                                    state.0.str_eq(name) && index == *err_index
-                                                },
-                                                TEXT_WIDTH
-                                            );
-                                            inline_duration_value(
-                                                ui,
-                                                "Duration:",
-                                                &mut frame.duration,
-                                                TEXT_WIDTH,
-                                                tracker
-                                            );
-                                        }, &mut self.tracker);
-                                    });
+                                            state.0.str_eq(name)
+                                        },
+                                        TEXT_WIDTH
+                                    );
                                 }
                             }
                         }

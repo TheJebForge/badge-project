@@ -1,11 +1,10 @@
 use crate::character::repr::{Animation, AnimationFrameSource};
 use crate::character::util::AsRichText;
-use crate::gui::app::editor::intermediate::{InterAction, InterActionType};
+use crate::gui::app::editor::intermediate::{InterAction, InterActionType, InterSequence, SharedLoadedImage};
 use crate::gui::app::editor::validation::ValidationError;
-use crate::gui::app::editor::{inline_image_picker, inline_validation_error, CharacterEditor, SharedInterState, IMAGE_EXTENSIONS};
+use crate::gui::app::editor::{inline_image_picker, inline_image_resource_picker, inline_validation_error, CharacterEditor, SharedInterState, IMAGE_EXTENSIONS};
 use crate::gui::app::shared::SharedString;
-use crate::gui::app::util;
-use crate::gui::app::util::{inline_checkbox, inline_drag_value, ChangeTracker, SPACING};
+use crate::gui::app::util::{inline_checkbox, inline_color_edit_rgb_tuple, inline_drag_value, inline_duration_value, inline_enum_edit, inline_folder_picker, inline_resource_picker, inline_style_label, inline_text_edit, pair_list_ui, vec_ui, ChangeTracker, SPACING};
 use egui::{CentralPanel, CollapsingHeader, ComboBox, ScrollArea, SidePanel, Ui};
 use std::path::PathBuf;
 
@@ -21,13 +20,13 @@ impl CharacterEditor {
                 ui.separator();
 
                 ui.horizontal(|ui| {
-                    util::inline_style_label(ui, "ID:", WIDTH);
+                    inline_style_label(ui, "ID:", WIDTH);
                     ui.label(&self.id);
                 });
 
-                util::inline_text_edit(ui, "Name:", &mut self.name, WIDTH, &mut self.tracker);
-                util::inline_text_edit(ui, "Species:", &mut self.species, WIDTH, &mut self.tracker);
-                util::inline_resource_picker(ui, "Default State:", &mut self.default_state, &self.states, WIDTH, &mut self.tracker);
+                inline_text_edit(ui, "Name:", &mut self.name, WIDTH, &mut self.tracker);
+                inline_text_edit(ui, "Species:", &mut self.species, WIDTH, &mut self.tracker);
+                inline_resource_picker(ui, "Default State:", &mut self.default_state, &self.states, WIDTH, &mut self.tracker);
                 inline_validation_error(
                     ui,
                     &self.validation_errors,
@@ -48,7 +47,7 @@ impl CharacterEditor {
                 ScrollArea::vertical()
                     .show(ui, |ui| {
                         ui.collapsing("Images", |ui| {
-                            util::pair_list_ui(ui, &mut self.images, |ui, _i, key, el, tracker| {
+                            pair_list_ui(ui, &mut self.images, (), |ui, _i, key, el, _, tracker| {
                                 const TEXT_WIDTH: f32 = 60.0;
 
                                 inline_validation_error(
@@ -99,20 +98,103 @@ impl CharacterEditor {
                             }, &mut self.tracker)
                         });
 
+                        ui.collapsing("Sequences", |ui| {
+                            pair_list_ui(ui, &mut self.sequences, &mut self.images, |ui, _, key, el, images, tracker| {
+                                sequence_edit_ui(ui, key, el, images, &self.location, tracker, &self.validation_errors)
+                            }, &mut self.tracker)
+                        });
+
                         ui.collapsing("Animations", |ui| {
-                            util::pair_list_ui(ui, &mut self.animations, |ui, _, key, el, tracker| {
+                            pair_list_ui(ui, &mut self.animations, (), |ui, _, key, el, _, tracker| {
                                 animation_edit_ui(ui, key, el, &self.location, tracker, &self.validation_errors)
                             }, &mut self.tracker)
                         });
 
                         ui.collapsing("Actions", |ui| {
-                            util::pair_list_ui(ui, &mut self.actions, |ui, _, key, el, tracker| {
+                            pair_list_ui(ui, &mut self.actions, (), |ui, _, key, el, _, tracker| {
                                 action_edit_ui(ui, key, el, &self.states, tracker, &self.validation_errors)
                             }, &mut self.tracker)
                         });
                     });
             });
     }
+}
+
+pub fn sequence_edit_ui(
+    ui: &mut Ui,
+    key: &mut SharedString,
+    element: &mut InterSequence,
+    images: &mut Vec<(SharedString, SharedLoadedImage)>,
+    location: &PathBuf,
+    tracker: &mut ChangeTracker,
+    validations: &Vec<ValidationError>
+) {
+    const TEXT_WIDTH: f32 = 80.0;
+
+    inline_validation_error(
+        ui,
+        validations,
+        "Duplicate name!",
+        |err| {
+            let ValidationError::DuplicateSequence(name) = err else {
+                return false;
+            };
+
+            key.str_eq(name)
+        },
+        TEXT_WIDTH
+    );
+
+    inline_validation_error(
+        ui,
+        validations,
+        "Empty name!",
+        |err| {
+            let ValidationError::EmptySequenceName = err else {
+                return false;
+            };
+
+            key.to_string().is_empty()
+        },
+        TEXT_WIDTH
+    );
+
+    ui.vertical(|ui| {
+        ui.label("Frames:");
+
+        vec_ui(ui, &mut element.frames, images, |ui, index, frame, images, tracker| {
+            inline_image_resource_picker(
+                ui,
+                "Image:",
+                &mut frame.image,
+                images,
+                location,
+                TEXT_WIDTH,
+                tracker,
+            );
+            inline_validation_error(
+                ui,
+                validations,
+                "Invalid image!",
+                |err| {
+                    let ValidationError::InvalidImageInSequenceFrame(name, err_index) = err else {
+                        return false;
+                    };
+
+                    key.str_eq(name) && index == *err_index
+                },
+                TEXT_WIDTH,
+            );
+            inline_duration_value(
+                ui,
+                "Duration:",
+                &mut frame.duration,
+                TEXT_WIDTH,
+                tracker,
+            );
+        }, tracker);
+    });
+
 }
 
 pub fn animation_edit_ui(
@@ -153,16 +235,16 @@ pub fn animation_edit_ui(
         TEXT_WIDTH
     );
 
-    util::inline_drag_value(ui, "X:", &mut element.x, TEXT_WIDTH, tracker);
-    util::inline_drag_value(ui, "Y:", &mut element.y, TEXT_WIDTH, tracker);
-    util::inline_drag_value(ui, "Width:", &mut element.width, TEXT_WIDTH, tracker);
-    util::inline_drag_value(ui, "Height:", &mut element.height, TEXT_WIDTH, tracker);
+    inline_drag_value(ui, "X:", &mut element.x, TEXT_WIDTH, tracker);
+    inline_drag_value(ui, "Y:", &mut element.y, TEXT_WIDTH, tracker);
+    inline_drag_value(ui, "Width:", &mut element.width, TEXT_WIDTH, tracker);
+    inline_drag_value(ui, "Height:", &mut element.height, TEXT_WIDTH, tracker);
 
     CollapsingHeader::new("Frames")
         .id_salt(key.0.as_ptr())
         .show(ui, |ui| {
             ui.horizontal(|ui| {
-                util::inline_style_label(ui, "Frame Source:", TEXT_WIDTH);
+                inline_style_label(ui, "Frame Source:", TEXT_WIDTH);
                 if ui.radio(element.frames.is_indexed(), "Indexed").clicked() {
                     element.frames = AnimationFrameSource::Indexed {
                         folder: Default::default(),
@@ -180,9 +262,9 @@ pub fn animation_edit_ui(
 
             match &mut element.frames {
                 AnimationFrameSource::Indexed { folder, extension, count } => {
-                    util::inline_folder_picker(ui, "Folder:", folder, location, TEXT_WIDTH, tracker);
-                    util::inline_text_edit(ui, "Extension:", extension, TEXT_WIDTH, tracker);
-                    util::inline_drag_value(ui, "Count:", count, TEXT_WIDTH, tracker);
+                    inline_folder_picker(ui, "Folder:", folder, location, TEXT_WIDTH, tracker);
+                    inline_text_edit(ui, "Extension:", extension, TEXT_WIDTH, tracker);
+                    inline_drag_value(ui, "Count:", count, TEXT_WIDTH, tracker);
                 }
 
                 AnimationFrameSource::List(list) => {
@@ -233,14 +315,14 @@ pub fn animation_edit_ui(
 
     ui.add_space(SPACING);
 
-    util::inline_checkbox(ui, "Clear Screen:", &mut element.clear_screen, TEXT_WIDTH, tracker);
+    inline_checkbox(ui, "Clear Screen:", &mut element.clear_screen, TEXT_WIDTH, tracker);
 
     if element.clear_screen {
-        util::inline_color_edit_rgb_tuple(ui, "Background Color:", &mut element.background_color, TEXT_WIDTH, tracker);
+        inline_color_edit_rgb_tuple(ui, "Background Color:", &mut element.background_color, TEXT_WIDTH, tracker);
     }
 
-    util::inline_enum_edit(ui, "Mode:", &mut element.mode, TEXT_WIDTH, tracker);
-    util::inline_checkbox(ui, "Upscale:", &mut element.upscale, TEXT_WIDTH, tracker);
+    inline_enum_edit(ui, "Mode:", &mut element.mode, TEXT_WIDTH, tracker);
+    inline_checkbox(ui, "Upscale:", &mut element.upscale, TEXT_WIDTH, tracker);
 }
 
 pub fn action_edit_ui(
@@ -281,10 +363,10 @@ pub fn action_edit_ui(
         TEXT_WIDTH
     );
 
-    util::inline_text_edit(ui, "Display Name:", &mut element.display, TEXT_WIDTH, tracker);
+    inline_text_edit(ui, "Display Name:", &mut element.display, TEXT_WIDTH, tracker);
 
     ui.horizontal(|ui| {
-        let id = util::inline_style_label(ui, "Type:", TEXT_WIDTH).response.id;
+        let id = inline_style_label(ui, "Type:", TEXT_WIDTH).response.id;
         ComboBox::new(id.with("combo"), "")
             .selected_text(element.ty.rich())
             .show_ui(ui, |ui| {
@@ -307,7 +389,7 @@ pub fn action_edit_ui(
     match &mut element.ty {
         InterActionType::None => {}
         InterActionType::SwitchState(state) => {
-            util::inline_resource_picker(ui, "State:", state, states, TEXT_WIDTH, tracker);
+            inline_resource_picker(ui, "State:", state, states, TEXT_WIDTH, tracker);
         }
     }
 }

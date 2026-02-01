@@ -85,6 +85,8 @@ pub enum StateImage {
         preload: bool
     },
     Sequence {
+        #[serde(default)]
+        name: Option<String>,
         frames: Vec<SequenceFrame>,
         mode: SequenceMode
     }
@@ -381,7 +383,7 @@ impl BinaryRepr for State {
                     }
                 }
             },
-            StateImage::Sequence { frames, mode } => {
+            StateImage::Sequence { frames, mode, .. } => {
                 bp_character_state_file_s {
                     image_type: bp_character_state_image_e_BP_CHARACTER_STATE_SEQUENCE,
                     image: bp_character_state_image_u {

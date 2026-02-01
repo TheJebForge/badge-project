@@ -23,10 +23,11 @@ where
     name.into()
 }
 
-pub fn pair_list_ui<K, T>(
+pub fn pair_list_ui<K, T, O>(
     ui: &mut Ui,
     map: &mut Vec<(K, T)>,
-    element_fn: impl Fn(&mut Ui, usize, &mut K, &mut T, &mut ChangeTracker),
+    mut refs: O,
+    element_fn: impl Fn(&mut Ui, usize, &mut K, &mut T, &mut O, &mut ChangeTracker),
     tracker: &mut ChangeTracker
 ) where
     K: From<String> + Display + MutableStringScope,
@@ -77,7 +78,7 @@ pub fn pair_list_ui<K, T>(
 
                             ui.separator();
 
-                            element_fn(ui, index, key, value, tracker);
+                            element_fn(ui, index, key, value, &mut refs, tracker);
                         });
                 }
 

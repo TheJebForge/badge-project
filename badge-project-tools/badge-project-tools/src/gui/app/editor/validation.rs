@@ -16,13 +16,17 @@ pub enum ValidationError {
     DuplicateAction(String),
     #[strum(to_string = "Duplicate image '{0}'!")]
     DuplicateImage(String),
+    #[strum(to_string = "Duplicate sequence '{0}'!")]
+    DuplicateSequence(String),
+    #[strum(to_string = "Selected sequence in state '{0}' doesn't exist!")]
+    InvalidSequenceInState(String),
     #[strum(to_string = "Selected animation in state '{0}' doesn't exist!")]
     InvalidAnimationInState(String),
     #[strum(to_string = "Selected next state in animation of state '{0}' doesn't exist!")]
     InvalidNextStateInAnimation(String),
     #[strum(to_string = "Selected image in state '{0}' doesn't exist!")]
     InvalidImageInState(String),
-    #[strum(to_string = "Selected image in sequence frame #{1} of state '{0}' doesn't exist!")]
+    #[strum(to_string = "Selected image in frame #{1} of sequence '{0}' doesn't exist!")]
     InvalidImageInSequenceFrame(String, usize),
     #[strum(to_string = "Selected action type in action '{0}' is invalid!")]
     InvalidActionType(String),
@@ -37,7 +41,9 @@ pub enum ValidationError {
     #[strum(to_string = "Action name can't be empty!")]
     EmptyActionName,
     #[strum(to_string = "Image name can't be empty!")]
-    EmptyImageName
+    EmptyImageName,
+    #[strum(to_string = "Sequence name can't be empty!")]
+    EmptySequenceName
 }
 
 impl CharacterEditor {
@@ -69,6 +75,12 @@ impl CharacterEditor {
                 .map(|e| ValidationError::DuplicateImage(e.to_string()))
         );
 
+        errors.extend(
+            find_duplicates(&self.sequences)
+                .into_iter()
+                .map(|e| ValidationError::DuplicateSequence(e.to_string()))
+        );
+
         // Check for empty names
         if check_for_empty(&self.states) {
             errors.push(ValidationError::EmptyStateName)
@@ -82,9 +94,16 @@ impl CharacterEditor {
         if check_for_empty(&self.images) {
             errors.push(ValidationError::EmptyImageName)
         }
+        if check_for_empty(&self.sequences) {
+            errors.push(ValidationError::EmptySequenceName)
+        }
 
         // Check for unassigned stuff
         let image_names = self.images.iter()
+            .map(|(k, _)| k.clone())
+            .collect::<HashSet<_>>();
+
+        let sequence_names = self.sequences.iter()
             .map(|(k, _)| k.clone())
             .collect::<HashSet<_>>();
 
@@ -116,11 +135,9 @@ impl CharacterEditor {
                     }
                 }
 
-                InterStateImage::Sequence { frames, .. } => {
-                    for (index, frame) in frames.iter().enumerate() {
-                    if !image_names.contains(&frame.image) {
-                    errors.push(ValidationError::InvalidImageInSequenceFrame(state_name.to_string(), index))
-                    }
+                InterStateImage::Sequence { sequence, .. } => {
+                    if !sequence_names.contains(sequence) {
+                        errors.push(ValidationError::InvalidSequenceInState(state_name.to_string()));
                     }
                 }
                 _ => {}
@@ -135,6 +152,14 @@ impl CharacterEditor {
             if let InterActionType::SwitchState(state) = &action.ty {
                 if !state_names.contains(state) {
                     errors.push(ValidationError::InvalidActionState(action_name.to_string()))
+                }
+            }
+        }
+        
+        for (sequence_name, sequence) in &self.sequences {
+            for (index, frame) in sequence.frames.iter().enumerate() {
+                if !image_names.contains(&frame.image) {
+                    errors.push(ValidationError::InvalidImageInSequenceFrame(sequence_name.to_string(), index))
                 }
             }
         }

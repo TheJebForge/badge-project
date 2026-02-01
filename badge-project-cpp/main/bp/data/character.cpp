@@ -468,10 +468,12 @@ namespace bp::data {
             file_size = fs::file_size(image_filename);
 
             if (const auto opt_image = image::allocator.allocate_image_data_sl(file_size)) {
-                image_data = std::move(opt_image.value());
+                image_data = opt_image.value();
             } else {
                 throw data_exception{Error::OutOfRAM};
             }
+
+            ESP_LOGI(TAG, "Allocated %x-%x for %s image", image_data->start(), image_data->end(), image_name.c_str());
 
             load_image_data(image_data->span(), image_filename);
         }
@@ -525,7 +527,7 @@ namespace bp::data {
             for (int frame_index = 1; frame_index <= anim_desc.frame_count; frame_index++) {
                 image::SharedAllocatedImageData frame;
                 if (const auto opt_image = image::allocator.allocate_image_data_sl(data_size)) {
-                    frame = std::move(opt_image.value());
+                    frame = opt_image.value();
                 } else {
                     throw data_exception{Error::OutOfRAM};
                 }
