@@ -315,6 +315,8 @@ pub fn animation_edit_ui(
 
     ui.add_space(SPACING);
 
+    inline_drag_value(ui, "FPS:", &mut element.fps, TEXT_WIDTH, tracker);
+
     inline_checkbox(ui, "Clear Screen:", &mut element.clear_screen, TEXT_WIDTH, tracker);
 
     if element.clear_screen {

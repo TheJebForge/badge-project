@@ -14,17 +14,8 @@
     </cargoProject>
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="a1adc736-dd13-4dc0-93b4-2fe3353375b1" name="Changes" comment="Fixed image pickers breaking, fixed selection when state delete">
+    <list default="true" id="a1adc736-dd13-4dc0-93b4-2fe3353375b1" name="Changes" comment="Sequence into separate resource, updated UI for the badge">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/badge-project-tools/src/character/mod.rs" beforeDir="false" afterPath="$PROJECT_DIR$/badge-project-tools/src/character/mod.rs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/badge-project-tools/src/character/repr.rs" beforeDir="false" afterPath="$PROJECT_DIR$/badge-project-tools/src/character/repr.rs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/badge-project-tools/src/gui/app/editor/intermediate.rs" beforeDir="false" afterPath="$PROJECT_DIR$/badge-project-tools/src/gui/app/editor/intermediate.rs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/badge-project-tools/src/gui/app/editor/mod.rs" beforeDir="false" afterPath="$PROJECT_DIR$/badge-project-tools/src/gui/app/editor/mod.rs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/badge-project-tools/src/gui/app/editor/nodes.rs" beforeDir="false" afterPath="$PROJECT_DIR$/badge-project-tools/src/gui/app/editor/nodes.rs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/badge-project-tools/src/gui/app/editor/resources.rs" beforeDir="false" afterPath="$PROJECT_DIR$/badge-project-tools/src/gui/app/editor/resources.rs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/badge-project-tools/src/gui/app/editor/simulator.rs" beforeDir="false" afterPath="$PROJECT_DIR$/badge-project-tools/src/gui/app/editor/simulator.rs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/badge-project-tools/src/gui/app/editor/validation.rs" beforeDir="false" afterPath="$PROJECT_DIR$/badge-project-tools/src/gui/app/editor/validation.rs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/badge-project-tools/src/gui/app/util.rs" beforeDir="false" afterPath="$PROJECT_DIR$/badge-project-tools/src/gui/app/util.rs" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -140,7 +131,7 @@
       <workItem from="1769678025972" duration="14633000" />
       <workItem from="1769757847648" duration="27313000" />
       <workItem from="1769862485884" duration="1501000" />
-      <workItem from="1769940598253" duration="5001000" />
+      <workItem from="1769940598253" duration="6852000" />
     </task>
     <task id="LOCAL-00001" summary="Most of GUI work is done">
       <option name="closed" value="true" />
@@ -166,7 +157,15 @@
       <option name="project" value="LOCAL" />
       <updated>1769863234563</updated>
     </task>
-    <option name="localTasksCounter" value="4" />
+    <task id="LOCAL-00004" summary="Sequence into separate resource, updated UI for the badge">
+      <option name="closed" value="true" />
+      <created>1769946702238</created>
+      <option name="number" value="00004" />
+      <option name="presentableId" value="LOCAL-00004" />
+      <option name="project" value="LOCAL" />
+      <updated>1769946702238</updated>
+    </task>
+    <option name="localTasksCounter" value="5" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -202,6 +201,7 @@
     <MESSAGE value="Most of GUI work is done" />
     <MESSAGE value="Export button and better handling of images" />
     <MESSAGE value="Fixed image pickers breaking, fixed selection when state delete" />
-    <option name="LAST_COMMIT_MESSAGE" value="Fixed image pickers breaking, fixed selection when state delete" />
+    <MESSAGE value="Sequence into separate resource, updated UI for the badge" />
+    <option name="LAST_COMMIT_MESSAGE" value="Sequence into separate resource, updated UI for the badge" />
   </component>
 </project>
