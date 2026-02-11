@@ -15,19 +15,7 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="a1adc736-dd13-4dc0-93b4-2fe3353375b1" name="Changes" comment="Fix unused tracker and remove redundant code">
-      <change beforePath="$PROJECT_DIR$/../badge-project-cpp/main/bp/data/character.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/../badge-project-cpp/main/bp/data/character.cpp" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/../badge-project-cpp/main/bp/data/character.hpp" beforeDir="false" afterPath="$PROJECT_DIR$/../badge-project-cpp/main/bp/data/character.hpp" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/../badge-project-cpp/main/bp/data/format.hpp" beforeDir="false" afterPath="$PROJECT_DIR$/../badge-project-cpp/main/bp/data/format.hpp" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/../badge-project-cpp/main/bp/fsm.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/../badge-project-cpp/main/bp/fsm.cpp" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/../badge-project-cpp/main/bp/fsm.hpp" beforeDir="false" afterPath="$PROJECT_DIR$/../badge-project-cpp/main/bp/fsm.hpp" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/badge-project-tools/src/character/mod.rs" beforeDir="false" afterPath="$PROJECT_DIR$/badge-project-tools/src/character/mod.rs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/badge-project-tools/src/character/repr.rs" beforeDir="false" afterPath="$PROJECT_DIR$/badge-project-tools/src/character/repr.rs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/badge-project-tools/src/gui/app/editor/intermediate.rs" beforeDir="false" afterPath="$PROJECT_DIR$/badge-project-tools/src/gui/app/editor/intermediate.rs" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/badge-project-tools/src/gui/app/editor/mod.rs" beforeDir="false" afterPath="$PROJECT_DIR$/badge-project-tools/src/gui/app/editor/mod.rs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/badge-project-tools/src/gui/app/editor/nodes.rs" beforeDir="false" afterPath="$PROJECT_DIR$/badge-project-tools/src/gui/app/editor/nodes.rs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/badge-project-tools/src/gui/app/editor/simulator.rs" beforeDir="false" afterPath="$PROJECT_DIR$/badge-project-tools/src/gui/app/editor/simulator.rs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/badge-project-tools/test.json" beforeDir="false" afterPath="$PROJECT_DIR$/badge-project-tools/test.json" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -145,7 +133,7 @@
       <workItem from="1769862485884" duration="1501000" />
       <workItem from="1769940598253" duration="6852000" />
       <workItem from="1770764778851" duration="8624000" />
-      <workItem from="1770831533093" duration="8032000" />
+      <workItem from="1770831533093" duration="8429000" />
     </task>
     <task id="LOCAL-00001" summary="Most of GUI work is done">
       <option name="closed" value="true" />

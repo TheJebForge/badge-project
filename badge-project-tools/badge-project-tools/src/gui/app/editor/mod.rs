@@ -502,7 +502,7 @@ pub fn inline_layer_selector(
     width: f32,
     tracker: &mut ChangeTracker
 ) {
-    const BOX_SIZE: f32 = 15.0;
+    const BOX_SIZE: f32 = 18.0;
     const COLUMNS: u8 = 8;
     const ROWS: u8 = 4;
 
@@ -555,7 +555,7 @@ pub fn inline_layer_selector(
                         rect.center(),
                         Align2::CENTER_CENTER,
                         this.to_string(),
-                        FontId::monospace(8.0),
+                        FontId::monospace(10.0),
                         style.text_color()
                     );
                 }
