@@ -527,6 +527,8 @@ pub fn inline_layer_selector(
                         } else {
                             *value = this;
                         }
+                        
+                        tracker.mark_change();
                     }
 
                     painter.text(

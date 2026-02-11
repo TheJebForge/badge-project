@@ -4,7 +4,7 @@ use crate::gui::app::editor::intermediate::{InterState, InterStateImage, InterSt
 use crate::gui::app::editor::validation::ValidationError;
 use crate::gui::app::editor::{inline_image_resource_picker, inline_layer_selector, inline_validation_error, CharacterEditor};
 use crate::gui::app::shared::{MutableStringScope, SharedString};
-use crate::gui::app::util::{inline_checkbox, inline_drag_value, inline_duration_value, inline_enum_edit, inline_resource_picker, inline_style_label, inline_text_edit, pick_unique_name, ChangeTracker};
+use crate::gui::app::util::{inline_drag_value, inline_duration_value, inline_enum_edit, inline_resource_picker, inline_style_label, inline_text_edit, pick_unique_name, ChangeTracker};
 use eframe::emath::{Pos2, Rect};
 use eframe::epaint::Shape;
 use egui::{vec2, Button, CentralPanel, Color32, ComboBox, Frame, Id, Painter, ScrollArea, SidePanel, Stroke, Style, Ui};

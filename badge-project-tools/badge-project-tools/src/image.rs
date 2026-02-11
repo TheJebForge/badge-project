@@ -1,6 +1,6 @@
 use std::{fs, path::PathBuf};
 
-use image::{imageops::{replace, FilterType}, ImageResult, RgbImage, RgbaImage};
+use image::{imageops::{replace, FilterType}, ImageResult, RgbImage};
 
 #[derive(clap::Parser, Debug)]
 #[command(

@@ -399,7 +399,6 @@ impl Simulator<'_> {
                             self.sim_state.prepared_images.push(allocation)
                         }
                     }
-                    _ => {}
                 }
             },
         }
