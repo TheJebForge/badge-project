@@ -41,7 +41,7 @@ impl Character {
             default_state: "idle".to_string(),
             states: HashMap::from([
                 ("idle".to_string(), State {
-                    layer: default_state_layer(),
+                    layer: 0,
                     image: StateImage::None,
                     transitions: vec![],
                     node_pos: None,
@@ -55,17 +55,13 @@ impl Character {
 
 #[derive(Deserialize, Serialize, Clone, Debug, Default)]
 pub struct State {
-    #[serde(default = "default_state_layer")]
-    pub layer: u16,
+    #[serde(default)]
+    pub layer: u8,
     pub image: StateImage,
     #[serde(default)]
     pub transitions: Vec<StateTransition>,
     #[serde(default)]
     pub node_pos: Option<(f32, f32)>
-}
-
-fn default_state_layer() -> u16 {
-    1
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug, Default)]
@@ -80,14 +76,14 @@ pub enum StateImage {
         #[serde(default)]
         upscale: bool,
         #[serde(default)]
-        load_mask: u16
+        layer_load: bool
     },
     Animation {
         name: String,
         next_state: String,
         loop_count: u16,
         #[serde(default)]
-        load_mask: u16
+        layer_load: bool
     },
     Sequence {
         #[serde(default)]
@@ -95,7 +91,7 @@ pub enum StateImage {
         frames: Vec<SequenceFrame>,
         mode: SequenceMode,
         #[serde(default)]
-        load_mask: u16
+        layer_load: bool
     }
 }
 
@@ -352,16 +348,16 @@ impl BinaryRepr for State {
         let file = match &self.image {
             StateImage::None => {
                 bp_character_state_file_s {
-                    load_layer: self.layer,
+                    layer: self.layer,
                     image_type: bp_character_state_image_e_BP_CHARACTER_STATE_NO_IMAGE,
                     image: bp_character_state_image_u {
                         no_data: 0
                     },
                 }
             },
-            StateImage::Single { name, width, height, upscale, load_mask, .. } => {
+            StateImage::Single { name, width, height, upscale, layer_load, .. } => {
                 bp_character_state_file_s {
-                    load_layer: self.layer,
+                    layer: self.layer,
                     image_type: bp_character_state_image_e_BP_CHARACTER_STATE_SINGLE_IMAGE,
                     image: bp_character_state_image_u {
                         image: bp_character_image_descriptor_s {
@@ -369,32 +365,32 @@ impl BinaryRepr for State {
                             width: if *upscale { *width / 2 } else { *width },
                             height: if *upscale { *height / 2 } else { *height },
                             upscale: *upscale,
-                            load_layer_mask: *load_mask,
+                            layer_load: *layer_load,
                         }
                     },
                 }
             }
-            StateImage::Animation { name, next_state, loop_count, load_mask } => {
+            StateImage::Animation { name, next_state, loop_count, layer_load } => {
                 bp_character_state_file_s {
-                    load_layer: self.layer,
+                    layer: self.layer,
                     image_type: bp_character_state_image_e_BP_CHARACTER_STATE_ANIMATION,
                     image: bp_character_state_image_u {
                         animation: bp_character_state_animation_descriptor_s {
                             name: string_to_char_array(name)?,
                             next_state: string_to_char_array(next_state)?,
                             loop_count: *loop_count,
-                            load_layer_mask: *load_mask
+                            layer_load: *layer_load
                         }
                     }
                 }
             },
-            StateImage::Sequence { frames, mode, load_mask, ..} => {
+            StateImage::Sequence { frames, mode, layer_load, ..} => {
                 bp_character_state_file_s {
-                    load_layer: self.layer,
+                    layer: self.layer,
                     image_type: bp_character_state_image_e_BP_CHARACTER_STATE_SEQUENCE,
                     image: bp_character_state_image_u {
                         sequence: bp_character_state_sequence_descriptor_s {
-                            load_layer_mask: *load_mask,
+                            layer_load: *layer_load,
                             frame_count: frames.len() as u16,
                             mode: match mode {
                                 SequenceMode::LoadAll => bp_character_sequence_mode_e_BP_CHARACTER_SEQUENCE_MODE_LOAD_ALL,

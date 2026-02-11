@@ -74,11 +74,9 @@ namespace bp::data {
         load_image_data(buffer, get_image_path(name));
     }
 
-    uint16_t Character::default_load_layer() const {
+    uint8_t Character::default_load_layer() const {
         const auto& default_state = this->states.at(this->default_state);
-        return default_state.load_layer
-                   ? default_state.load_layer
-                   : 1;
+        return default_state.layer;
     }
 
     std::vector<std::string> list_characters() {
@@ -193,7 +191,7 @@ namespace bp::data {
                 auto state_pair = states.emplace(
                     state_entry.path().filename(),
                     State{
-                        .load_layer = state_struct.load_layer
+                        .layer = state_struct.layer
                     }
                 ).first;
                 auto& [_, image, transitions] = state_pair->second;
@@ -203,33 +201,33 @@ namespace bp::data {
                         image = std::monostate{};
                         break;
                     case BP_CHARACTER_STATE_SINGLE_IMAGE: {
-                        auto& [image_name, width, height, upscale, load_layer_mask] = state_struct.image.image;
+                        auto& [image_name, width, height, upscale, layer_load] = state_struct.image.image;
                         image = StateImage{
                             .image_name = image_name,
                             .width = width,
                             .height = height,
                             .upscale = upscale,
-                            .load_layer_mask = load_layer_mask
+                            .layer_load = layer_load
                         };
                         break;
                     }
                     case BP_CHARACTER_STATE_ANIMATION: {
-                        auto& [name, next_state, loop_count, load_layer_mask] = state_struct.image.animation;
+                        auto& [name, next_state, loop_count, layer_load] = state_struct.image.animation;
                         image = StateAnimation{
                             .name = name,
                             .next_state = next_state,
                             .loop_count = loop_count,
-                            .load_layer_mask = load_layer_mask,
+                            .layer_load = layer_load,
                             .frames_folder = character.animations_folder / name / "frames"
                         };
                         break;
                     }
                     case BP_CHARACTER_STATE_SEQUENCE: {
-                        auto& [frame_count, mode, load_layer_mask] = state_struct.image.sequence;
+                        auto& [frame_count, mode, layer_load] = state_struct.image.sequence;
 
                         image = StateSequence{
                             .frames{},
-                            .load_layer_mask = load_layer_mask
+                            .layer_load = layer_load
                         };
 
                         // ReSharper disable once CppUseStructuredBinding
@@ -533,15 +531,17 @@ namespace bp::data {
         const auto default_layer = character.default_load_layer();
 
         for (const auto& [_, state]: character.states) {
+            if (state.layer != default_layer) continue;
+
             if (const auto* image = std::get_if<StateImage>(&state.image)) {
-                if (!(image->load_layer_mask & default_layer)) continue;
+                if (!image->layer_load) continue;
 
                 preload_image(
                     layer_data, image->image_name, character.images_folder,
                     image->width, image->height
                 );
             } else if (const auto* sequence = std::get_if<StateSequence>(&state.image)) {
-                if (!(sequence->load_layer_mask & default_layer)) continue;
+                if (!sequence->layer_load) continue;
 
                 for (const auto& frame: sequence->frames) {
                     preload_image(
@@ -556,7 +556,7 @@ namespace bp::data {
             if (!std::holds_alternative<StateAnimation>(state.image)) continue;
 
             const auto& state_anim = std::get<StateAnimation>(state.image);
-            if (!(state_anim.load_layer_mask & default_layer)) continue;
+            if (state.layer != default_layer || !state_anim.layer_load) continue;
 
             const auto& anim_desc = character.animations.at(state_anim.name);
             preload_animation(layer_data, state_anim, anim_desc);

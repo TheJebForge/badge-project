@@ -4,7 +4,7 @@ use crate::gui::app::editor::intermediate::{InterState, InterStateImage, InterSt
 use crate::gui::app::editor::validation::ValidationError;
 use crate::gui::app::editor::{inline_image_resource_picker, inline_layer_selector, inline_validation_error, CharacterEditor};
 use crate::gui::app::shared::{MutableStringScope, SharedString};
-use crate::gui::app::util::{inline_drag_value, inline_duration_value, inline_enum_edit, inline_resource_picker, inline_style_label, inline_text_edit, pick_unique_name, ChangeTracker};
+use crate::gui::app::util::{inline_checkbox, inline_drag_value, inline_duration_value, inline_enum_edit, inline_resource_picker, inline_style_label, inline_text_edit, pick_unique_name, ChangeTracker};
 use eframe::emath::{Pos2, Rect};
 use eframe::epaint::Shape;
 use egui::{vec2, Button, CentralPanel, Color32, ComboBox, Frame, Id, Painter, ScrollArea, SidePanel, Stroke, Style, Ui};
@@ -578,7 +578,7 @@ impl CharacterEditor {
                                         {
                                             *image = InterStateImage::Single {
                                                 image: SharedString::from("None"),
-                                                load_mask: 0,
+                                                layer_load: false,
                                             };
                                             self.tracker.mark_change();
                                         }
@@ -591,7 +591,7 @@ impl CharacterEditor {
                                                 animation: SharedString::from("None"),
                                                 next_state: self.states.first().unwrap().0.clone(),
                                                 loop_count: 1,
-                                                load_mask: 0,
+                                                layer_load: false,
                                             };
                                             self.tracker.mark_change();
                                         }
@@ -603,14 +603,14 @@ impl CharacterEditor {
                                             *image = InterStateImage::Sequence {
                                                 sequence: SharedString::from("None"),
                                                 mode: Default::default(),
-                                                load_mask: 0,
+                                                layer_load: false,
                                             };
                                             self.tracker.mark_change();
                                         }
                                     });
                             });
 
-                            inline_layer_selector(ui, "Layer:", &mut borrowed_state.layer, false, TEXT_WIDTH, &mut self.tracker);
+                            inline_layer_selector(ui, "Layer:", &mut borrowed_state.layer, TEXT_WIDTH, &mut self.tracker);
 
                             ui.separator();
 
@@ -618,7 +618,7 @@ impl CharacterEditor {
                                 InterStateImage::None => {}
                                 InterStateImage::Single {
                                     image,
-                                    load_mask,
+                                    layer_load,
                                 } => {
                                     inline_image_resource_picker(
                                         ui,
@@ -642,13 +642,13 @@ impl CharacterEditor {
                                         },
                                         TEXT_WIDTH
                                     );
-                                    inline_layer_selector(ui, "Load Layers:", load_mask, true, TEXT_WIDTH, &mut self.tracker);
+                                    inline_checkbox(ui, "Load with Layer:", layer_load, TEXT_WIDTH, &mut self.tracker);
                                 }
                                 InterStateImage::Animation {
                                     animation,
                                     next_state,
                                     loop_count,
-                                    load_mask,
+                                    layer_load,
                                 } => {
                                     inline_resource_picker(
                                         ui,
@@ -695,9 +695,9 @@ impl CharacterEditor {
                                     );
 
                                     inline_drag_value(ui, "Loop Count:", loop_count, TEXT_WIDTH, &mut self.tracker);
-                                    inline_layer_selector(ui, "Load Layers:", load_mask, true, TEXT_WIDTH, &mut self.tracker);
+                                    inline_checkbox(ui, "Load with Layer:", layer_load, TEXT_WIDTH, &mut self.tracker);
                                 }
-                                InterStateImage::Sequence { sequence, mode, load_mask } => {
+                                InterStateImage::Sequence { sequence, mode, layer_load } => {
                                     inline_enum_edit(ui, "Mode:", mode, TEXT_WIDTH, &mut self.tracker);
                                     inline_resource_picker(ui, "Sequence:", sequence, &self.sequences, TEXT_WIDTH, &mut self.tracker);
                                     inline_validation_error(
@@ -713,7 +713,7 @@ impl CharacterEditor {
                                         },
                                         TEXT_WIDTH
                                     );
-                                    inline_layer_selector(ui, "Load Layers:", load_mask, true, TEXT_WIDTH, &mut self.tracker);
+                                    inline_checkbox(ui, "Load with Layer:", layer_load, TEXT_WIDTH, &mut self.tracker);
                                 }
                             }
                         }

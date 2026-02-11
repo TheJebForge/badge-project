@@ -250,12 +250,11 @@ impl Simulator<'_> {
 
         let is_dynamic = match &state.image {
             InterStateImage::None => false,
-            InterStateImage::Single { load_mask, .. } =>
-                load_mask & state.layer == 0,
+            InterStateImage::Single { layer_load, .. } => !*layer_load,
             InterStateImage::Animation {
-                load_mask, animation, ..
+                layer_load, animation, ..
             } => {
-                if load_mask & state.layer != 0 {
+                if *layer_load {
                     false
                 } else {
                     let Some((_, animation)) = self.animations.iter().find(|(k, _)| k == animation)
@@ -266,8 +265,7 @@ impl Simulator<'_> {
                     animation.mode.is_from_ram()
                 }
             }
-            InterStateImage::Sequence { load_mask, .. } =>
-                load_mask & state.layer == 0,
+            InterStateImage::Sequence { layer_load, .. } => !*layer_load,
         };
 
         Some((is_dynamic, is_layer_switch))
@@ -285,8 +283,8 @@ impl Simulator<'_> {
 
         match &state.image {
             InterStateImage::None => {}
-            InterStateImage::Single { image, load_mask } => {
-                if load_mask & self.sim_state.current_layer != 0 {
+            InterStateImage::Single { image, layer_load } => {
+                if *layer_load {
                     return true;
                 }
 
@@ -305,9 +303,9 @@ impl Simulator<'_> {
                 self.sim_state.prepared_images.push(allocation)
             }
             InterStateImage::Animation {
-                animation, load_mask, ..
+                animation, layer_load, ..
             } => {
-                if load_mask & self.sim_state.current_layer != 0 {
+                if *layer_load {
                     return true;
                 }
 
@@ -334,8 +332,8 @@ impl Simulator<'_> {
                     self.sim_state.prepared_images.push(allocation)
                 }
             }
-            InterStateImage::Sequence { load_mask, mode, sequence } => {
-                if load_mask & self.sim_state.current_layer != 0 {
+            InterStateImage::Sequence { layer_load, mode, sequence } => {
+                if *layer_load {
                     return true;
                 }
 
@@ -406,7 +404,7 @@ impl Simulator<'_> {
         true
     }
 
-    pub fn prepare_layer(&mut self, new_layer: u16) -> bool {
+    pub fn prepare_layer(&mut self, new_layer: u8) -> bool {
         self.sim_state.current_layer = new_layer;
 
         let mut new_layer_images = HashSet::<SharedString>::new();
@@ -416,19 +414,23 @@ impl Simulator<'_> {
         for (_, state) in self.states {
             let borrowed_state = state.borrow();
 
+            if borrowed_state.layer != new_layer {
+                continue;
+            }
+
             match &borrowed_state.image {
-                InterStateImage::Single { load_mask, image } => {
-                    if load_mask & new_layer != 0 {
+                InterStateImage::Single { layer_load, image } => {
+                    if *layer_load {
                         new_layer_images.insert(image.clone());
                     }
                 }
-                InterStateImage::Animation { animation, load_mask, .. } => {
-                    if load_mask & new_layer != 0 {
+                InterStateImage::Animation { animation, layer_load, .. } => {
+                    if *layer_load {
                         new_layer_anims.insert(animation.clone());
                     }
                 }
-                InterStateImage::Sequence { sequence, load_mask, .. } => {
-                    if load_mask & new_layer != 0 {
+                InterStateImage::Sequence { sequence, layer_load, .. } => {
+                    if *layer_load {
                         let Some((_, sequence)) = self.sequences.iter()
                             .find(|(k, _)| k == sequence)
                         else {
@@ -647,8 +649,8 @@ impl Simulator<'_> {
 
             match &state_data.image {
                 InterStateImage::None => {}
-                InterStateImage::Single { image, load_mask } => {
-                    if load_mask & sim.current_layer != 0 {
+                InterStateImage::Single { image, layer_load } => {
+                    if *layer_load {
                         let Some(alloc) = sim.loaded_layer_images.get(image) else {
                             return;
                         };
@@ -659,9 +661,9 @@ impl Simulator<'_> {
                     }
                 }
                 InterStateImage::Animation {
-                    animation, load_mask, ..
+                    animation, layer_load, ..
                 } => {
-                    if load_mask & sim.current_layer != 0 {
+                    if *layer_load {
                         let Some(frames) = sim.loaded_layer_animations.get(animation)
                         else {
                             return;
@@ -676,13 +678,13 @@ impl Simulator<'_> {
                         sim.current_image = sim.loaded_images.get(0).cloned();
                     }
                 }
-                InterStateImage::Sequence { load_mask, sequence, .. } => {
+                InterStateImage::Sequence { layer_load, sequence, .. } => {
                     let Some((_, sequence)) = self.sequences.iter()
                         .find(|(k, _)| k == sequence) else {
                         return;
                     };
 
-                    if load_mask & sim.current_layer != 0 {
+                    if *layer_load {
                         let Some(first_frame) = sequence.frames.first() else {
                             return;
                         };
@@ -708,10 +710,14 @@ impl Simulator<'_> {
         for (_, state) in self.states {
             let borrowed = state.borrow();
 
+            if self.sim_state.current_layer != borrowed.layer {
+                continue;
+            }
+
             match &borrowed.image {
                 InterStateImage::None => {}
-                InterStateImage::Single { image, load_mask } => {
-                    if load_mask & self.sim_state.current_layer == 0 {
+                InterStateImage::Single { image, layer_load } => {
+                    if !*layer_load {
                         continue;
                     }
 
@@ -731,9 +737,9 @@ impl Simulator<'_> {
                     );
                 }
                 InterStateImage::Animation {
-                    animation, load_mask, ..
+                    animation, layer_load, ..
                 } => {
-                    if load_mask & self.sim_state.current_layer == 0 {
+                    if !*layer_load {
                         continue;
                     }
 
@@ -756,8 +762,8 @@ impl Simulator<'_> {
                             .collect::<Option<Vec<_>>>()?,
                     );
                 }
-                InterStateImage::Sequence { load_mask, sequence, .. } => {
-                    if load_mask & self.sim_state.current_layer == 0 {
+                InterStateImage::Sequence { layer_load, sequence, .. } => {
+                    if !*layer_load {
                         continue;
                     }
 
@@ -1200,7 +1206,7 @@ pub struct SimulatorState {
     pub status: SimulatorStatus,
     pub allocator: AllocatorState,
 
-    pub current_layer: u16,
+    pub current_layer: u8,
     pub current_state: SharedString,
     pub next_state: Option<SharedString>,
 

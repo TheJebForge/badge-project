@@ -47,23 +47,12 @@ impl InterAction {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct InterState {
-    pub layer: u16,
+    pub layer: u8,
     pub image: InterStateImage,
     pub transitions: Vec<SharedInterStateTransition>,
     pub node_pos: Pos2
-}
-
-impl Default for InterState {
-    fn default() -> Self {
-        Self {
-            layer: 1,
-            image: Default::default(),
-            transitions: vec![],
-            node_pos: Default::default(),
-        }
-    }
 }
 
 pub type SharedInterState = Rc<RefCell<InterState>>;
@@ -80,28 +69,28 @@ impl InterState {
             StateImage::None => InterStateImage::None,
             StateImage::Single {
                 name,
-                load_mask,
+                layer_load,
                 ..
             } => InterStateImage::Single {
                 image: images.iter().find(|(k, _)| k.str_eq(&name))?.0.clone(),
-                load_mask,
+                layer_load,
             },
             StateImage::Animation {
                 name,
                 next_state,
                 loop_count,
-                load_mask
+                layer_load
             } => InterStateImage::Animation {
                 animation: animations.iter().find(|(k, _)| k.str_eq(&name))?.0.clone(),
                 next_state: names.iter().find(|k| k.str_eq(&next_state))?.clone(),
                 loop_count,
-                load_mask,
+                layer_load,
             },
             StateImage::Sequence {
                 name,
                 frames,
                 mode,
-                load_mask
+                layer_load
             } => {
                 let from_frames = |frames: Vec<SequenceFrame>| {
                     InterSequence {
@@ -134,7 +123,7 @@ impl InterState {
                 InterStateImage::Sequence {
                     sequence,
                     mode,
-                    load_mask
+                    layer_load
                 }
             }
         };
@@ -172,7 +161,7 @@ impl InterState {
             image: match self.image {
                 InterStateImage::None => StateImage::None,
                 InterStateImage::Single {
-                    image, load_mask
+                    image, layer_load
                 } => {
                     let image_data = images.iter().find(|(k, _)| k == &image)?.1.borrow().clone();
 
@@ -182,19 +171,19 @@ impl InterState {
                         width: image_data.width,
                         height: image_data.height,
                         upscale: image_data.upscale,
-                        load_mask,
+                        layer_load,
                     }
                 },
                 InterStateImage::Animation {
-                    animation, next_state, loop_count, load_mask
+                    animation, next_state, loop_count, layer_load
                 } => StateImage::Animation {
                     name: animation.to_string(),
                     next_state: next_state.to_string(),
                     loop_count,
-                    load_mask,
+                    layer_load,
                 },
                 InterStateImage::Sequence {
-                    sequence, mode, load_mask
+                    sequence, mode, layer_load
                 } => {
                     let sequence_data = sequences.iter()
                         .find(|(k, _)| k == &sequence)?.1.clone();
@@ -216,7 +205,7 @@ impl InterState {
                             })
                             .collect(),
                         mode,
-                        load_mask
+                        layer_load
                     }
                 }
             },
@@ -234,18 +223,18 @@ pub enum InterStateImage {
     None,
     Single {
         image: SharedString,
-        load_mask: u16
+        layer_load: bool
     },
     Animation {
         animation: SharedString,
         next_state: SharedString,
         loop_count: u16,
-        load_mask: u16
+        layer_load: bool
     },
     Sequence {
         sequence: SharedString,
         mode: SequenceMode,
-        load_mask: u16
+        layer_load: bool
     }
 }
 

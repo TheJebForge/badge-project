@@ -3,6 +3,8 @@ use crate::image::encode_image_data;
 use std::fs::File;
 use std::path::{Path, PathBuf};
 use std::{env, fs};
+use std::collections::HashSet;
+use std::io::Write;
 use tar::{Builder, Header};
 
 pub mod repr;
@@ -28,7 +30,23 @@ fn append_vec<P: AsRef<Path>, T: std::io::Write>(builder: &mut tar::Builder<T>, 
     builder.append_data(&mut header, path, data)
 }
 
-fn save_image(char_path: impl AsRef<Path>, mut archive: &mut Builder<File>, name: &String, location: &Path, path: &Path, width: u32, height: u32, upscale: bool) -> anyhow::Result<()> {
+fn save_image<W: Write>(
+    char_path: impl AsRef<Path>,
+    mut archive: &mut Builder<W>,
+    name: &String,
+    location: &Path,
+    path: &Path,
+    width: u32,
+    height: u32,
+    upscale: bool,
+    saved_images: &mut HashSet<String>
+) -> anyhow::Result<()> {
+    if saved_images.contains(name) {
+        return Ok(())
+    }
+
+    saved_images.insert(name.clone());
+
     let real_width = if upscale {
         width / 2
     } else {
@@ -56,14 +74,20 @@ pub fn process_character_cli(cli: CharacterCli) -> anyhow::Result<()> {
 }
 
 pub fn process_character_archive(char: Character, path: impl AsRef<Path>, location: impl AsRef<Path>) -> anyhow::Result<()> {
-    let location = location.as_ref();
-
     let file = File::create(path)?;
+
+    write_character_tar(char, file, location)
+}
+
+pub fn write_character_tar(char: Character, writer: impl Write, location: impl AsRef<Path>) -> anyhow::Result<()> {
+    let location = location.as_ref();
 
     let char_path = Path::new("characters").join(&char.id);
 
-    let mut archive = Builder::new(file);
+    let mut archive = Builder::new(writer);
     append_vec(&mut archive, char_path.join("character.bin"), &char.to_bin()?)?;
+
+    let mut saved_images = HashSet::new();
 
     for (state_name, state) in &char.states {
         let state_path = char_path.join("states").join(state_name);
@@ -77,7 +101,17 @@ pub fn process_character_archive(char: Character, path: impl AsRef<Path>, locati
             upscale,
             ..
         } = &state.image {
-            save_image(&char_path, &mut archive, name, location, path, *width, *height, *upscale)?;
+            save_image(
+                &char_path,
+                &mut archive,
+                name,
+                location,
+                path,
+                *width,
+                *height,
+                *upscale,
+                &mut saved_images
+            )?;
         }
 
         if let StateImage::Sequence {
@@ -87,7 +121,17 @@ pub fn process_character_archive(char: Character, path: impl AsRef<Path>, locati
             let frames_path = state_path.join("frames");
             for (index, frame) in frames.iter().enumerate() {
                 // Save image file
-                save_image(&char_path, &mut archive, &frame.name, location, &frame.path, frame.width, frame.height, frame.upscale)?;
+                save_image(
+                    &char_path,
+                    &mut archive,
+                    &frame.name,
+                    location,
+                    &frame.path,
+                    frame.width,
+                    frame.height,
+                    frame.upscale,
+                    &mut saved_images
+                )?;
 
                 // Save frame
                 let frame_path = frames_path.join(format!("{index}.bin"));

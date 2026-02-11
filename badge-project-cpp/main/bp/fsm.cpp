@@ -285,8 +285,10 @@ void bp::layer_loader() {
 
     // Layer discovery
     for (const auto& [state_name, state]: char_fsm.character_data.states) {
+        if (layer != state.layer) continue;
+
         if (const auto* single = std::get_if<data::StateImage>(&state.image)) {
-            if (layer & single->load_layer_mask) {
+            if (single->layer_load) {
                 images_on_new_layer.emplace(single->image_name);
                 image_size.emplace(
                     single->image_name,
@@ -296,14 +298,14 @@ void bp::layer_loader() {
         }
 
         if (const auto* anim = std::get_if<data::StateAnimation>(&state.image)) {
-            if (layer & anim->load_layer_mask) {
+            if (anim->layer_load) {
                 animations_on_new_layer.emplace(anim->name);
                 state_anims.emplace(anim->name, anim);
             }
         }
 
         if (const auto* sequence = std::get_if<data::StateSequence>(&state.image)) {
-            if (layer & sequence->load_layer_mask) {
+            if (sequence->layer_load) {
                 for (const auto& frame: sequence->frames) {
                     images_on_new_layer.emplace(frame.image_name);
                     image_size.emplace(
@@ -550,9 +552,9 @@ void bp::sequence_cooker(const data::StateSequence* sequence) {
     char_fsm.done_cooking_sl(true);
 }
 
-bool CharacterFSM::cook_if_needed(const data::StateImageVariant& image) const {
+bool CharacterFSM::cook_if_needed(const data::StateImageVariant& image, const uint8_t layer) const {
     if (const auto* image_state = std::get_if<data::StateImage>(&image)) {
-        if (image_state->load_layer_mask & prepared_load_layer) return false;
+        if (prepared_load_layer == layer && image_state->layer_load) return false;
 
         // Cook for image
         if (const portBASE_TYPE result = xTaskCreate(
@@ -570,7 +572,7 @@ bool CharacterFSM::cook_if_needed(const data::StateImageVariant& image) const {
     }
 
     if (const auto* anim_state = std::get_if<data::StateAnimation>(&image)) {
-        if (anim_state->load_layer_mask & prepared_load_layer) return false;
+        if (prepared_load_layer == layer && anim_state->layer_load) return false;
         if (const auto& anim_desc = character_data.animations.at(anim_state->name);
             anim_desc.mode != data::AnimationMode::FromRAM) return false;
 
@@ -590,7 +592,7 @@ bool CharacterFSM::cook_if_needed(const data::StateImageVariant& image) const {
     }
 
     if (const auto* sequence_state = std::get_if<data::StateSequence>(&image)) {
-        if (sequence_state->load_layer_mask & prepared_load_layer) return false;
+        if (prepared_load_layer == layer && sequence_state->layer_load) return false;
 
         // Cook for sequence frames
         if (const portBASE_TYPE result = xTaskCreate(
@@ -696,7 +698,7 @@ void CharacterFSM::switch_state_unchecked(const std::string& state_name) {
         return;
     }
 
-    if (!cook_if_needed(image)) {
+    if (!cook_if_needed(image, layer)) {
         ESP_LOGI(TAG, "Switching to '%s' state", state_name.c_str());
 
         CriticalGuard guard(&spinlock);
@@ -955,6 +957,7 @@ void upload_to_screen(
 }
 
 void CharacterFSM::play_animation(
+    const uint8_t layer,
     const data::StateAnimation& state_desc,
     const data::Animation& animation_desc
 ) const {
@@ -999,7 +1002,7 @@ void CharacterFSM::play_animation(
 
     FrameTimer timer{animation_desc.interval_us};
 
-    if (state_desc.load_layer_mask & prepared_load_layer) {
+    if (layer == prepared_load_layer && state_desc.layer_load) {
         for (int repeat = 0; repeat < state_desc.loop_count; repeat++) {
             for (const auto& frame: loaded_layer_data.animation_frames.at(state_desc.name)) {
                 timer.frame_start();
@@ -1113,12 +1116,12 @@ void CharacterFSM::update_display(
     lv_obj_invalidate(lv_screen_active());
 }
 
-void CharacterFSM::set_ui_image(const data::StateImageVariant& variant) {
+void CharacterFSM::set_ui_image(const uint8_t layer, const data::StateImageVariant& variant) {
     auto busy_guard = get_busy_sl();
     ui_dirty = false;
 
     if (const auto* image_desc = std::get_if<data::StateImage>(&variant)) {
-        if (image_desc->load_layer_mask & prepared_load_layer) {
+        if (layer == prepared_load_layer && image_desc->layer_load) {
             const auto& [dsc, ptr] = loaded_layer_data.image_data.at(image_desc->image_name);
             update_display(ptr, dsc, image_desc->upscale);
         } else {
@@ -1127,7 +1130,7 @@ void CharacterFSM::set_ui_image(const data::StateImageVariant& variant) {
     } else if (const auto* anim_desc = std::get_if<data::StateAnimation>(&variant)) {
         const auto& animation = character_data.animations.at(anim_desc->name);
 
-        play_animation(*anim_desc, animation);
+        play_animation(layer, *anim_desc, animation);
         busy_guard.free();
 
         switch_state_unchecked(anim_desc->next_state);
@@ -1146,7 +1149,7 @@ void CharacterFSM::set_ui_image(const data::StateImageVariant& variant) {
 
             next_frame_time = esp_timer_get_time() + frame.duration_us;
 
-            if (sequence_desc->load_layer_mask & prepared_load_layer) {
+            if (layer == prepared_load_layer && sequence_desc->layer_load) {
                 const auto& [dsc, ptr] = loaded_layer_data.image_data.at(frame.image_name);
 
                 update_display(ptr, dsc, frame.upscale);
@@ -1216,16 +1219,16 @@ void CharacterFSM::tick() {
     const auto time_since_transition = now - last_transition_time;
 
     try {
-        auto& [_, image, transitions] = get_current_state_sl();
+        auto& [layer, image, transitions] = get_current_state_sl();
 
         if (ui_dirty || (current_sequence_index != -1 && now > next_frame_time)) {
-            set_ui_image(image);
+            set_ui_image(layer, image);
         }
 
         update_progress_if_needed();
         address_queue();
 
-        if (!state_is_cooking) {
+        if (!state_is_cooking && !preparing_load_layer) {
             for (auto& [next_state, trigger]: transitions) {
                 if (const auto elapsed = std::get_if<data::StateTransitionElapsedTime>(&trigger)) {
                     if (time_since_transition > elapsed->duration_us) {

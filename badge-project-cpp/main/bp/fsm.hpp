@@ -37,7 +37,7 @@ namespace bp {
         std::optional<std::string> queued_state;
         std::unordered_map<std::string, int64_t> random_durations{};
 
-        uint16_t prepared_load_layer;
+        uint8_t prepared_load_layer;
         bool preparing_load_layer = false;
         std::optional<std::string> preparing_load_layer_for;
         bool preparing_ui_dirty = false;
@@ -96,10 +96,10 @@ namespace bp {
         void wait_until_not_busy_sl();
 
         void play_animation(
-            const data::StateAnimation& state_desc, const data::Animation& animation_desc
+            uint8_t layer, const data::StateAnimation& state_desc, const data::Animation& animation_desc
         ) const;
         void update_display(const image::SharedAllocatedImageData& image, const lv_image_dsc_t& desc, bool upscale);
-        void set_ui_image(const data::StateImageVariant& variant);
+        void set_ui_image(uint8_t layer, const data::StateImageVariant& variant);
 
         void address_queue();
         void switch_state_internal(const std::string& state_name);
@@ -108,7 +108,7 @@ namespace bp {
         int64_t get_random_duration(const std::string& state_name, const data::StateTransitionRandom& rng_specs, int64_t time_since_transition);
         void clear_random_duration(const std::string& state_name);
 
-        bool cook_if_needed(const data::StateImageVariant& image) const;
+        bool cook_if_needed(const data::StateImageVariant& image, uint8_t layer) const;
         void set_progress_visible(bool visibility);
         void set_cooking_progress(int32_t current, int32_t max);
         void update_progress_if_needed();

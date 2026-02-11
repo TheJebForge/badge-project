@@ -11,7 +11,6 @@
 #include <lvgl.h>
 
 #include "character.hpp"
-#include "character.hpp"
 #include "image.hpp"
 #include "../util/allocator.hpp"
 
@@ -43,7 +42,7 @@ namespace bp::data {
         uint32_t width;
         uint32_t height;
         bool upscale;
-        uint16_t load_layer_mask;
+        bool layer_load;
 
         [[nodiscard]] bool image_exists(const Character& character) const;
         [[nodiscard]] std::size_t get_image_size(const Character& character) const;
@@ -54,7 +53,7 @@ namespace bp::data {
         std::string name;
         std::string next_state;
         uint16_t loop_count;
-        uint16_t load_layer_mask;
+        bool layer_load;
         std::filesystem::path frames_folder;
 
         void load_frame(std::span<uint8_t> buffer, std::size_t index) const;
@@ -80,7 +79,7 @@ namespace bp::data {
     struct StateSequence {
         std::vector<SequenceFrame> frames;
         SequenceLoadMode mode;
-        uint16_t load_layer_mask;
+        bool layer_load;
 
         [[nodiscard]] bool frame_exists(const Character& character, std::size_t index) const;
         [[nodiscard]] std::size_t get_frame_size(const Character& character, std::size_t index) const;
@@ -90,7 +89,7 @@ namespace bp::data {
     using StateImageVariant = std::variant<std::monostate, StateImage, StateAnimation, StateSequence>;
 
     struct State {
-        uint16_t load_layer;
+        uint8_t layer;
         StateImageVariant image;
         std::vector<StateTransition> transitions;
     };
@@ -142,7 +141,7 @@ namespace bp::data {
         bool image_exists(const std::string& name) const;
         std::size_t get_image_size(const std::string& name) const;
         void load_image(std::span<uint8_t> buffer, const std::string& name) const;
-        uint16_t default_load_layer() const;
+        uint8_t default_load_layer() const;
     };
 
     std::vector<std::string> list_characters();

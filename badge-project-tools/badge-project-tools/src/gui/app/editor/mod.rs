@@ -4,7 +4,7 @@ mod nodes;
 mod validation;
 mod simulator;
 
-use crate::character::process_character_archive;
+use crate::character::{process_character_archive, write_character_tar};
 use crate::character::repr::{Animation, Character, State};
 use crate::character::util::AsRichText;
 use crate::gui::app::editor::intermediate::{find_images, InterAction, InterSequence, InterState, LoadedImage, SharedInterState, SharedLoadedImage};
@@ -228,6 +228,33 @@ impl CharacterEditor {
 
     pub fn export(&self) {
         match self.export_character() {
+            Ok(_) => {}
+            Err(err) => eprintln!("Error while exporting: {err}")
+        }
+    }
+
+    pub fn export_to_folder(&self) -> anyhow::Result<()> {
+        let Some(picked_location) = rfd::FileDialog::new()
+            .set_title("Export character binaries to location")
+            .set_directory(&self.location)
+            .pick_folder()
+        else {
+            return Err(anyhow!("Cancelled!"))
+        };
+
+        let char = self.as_repr();
+
+        let mut buffer: Vec<u8> = vec![];
+        write_character_tar(char, &mut buffer, &self.location)?;
+
+        let mut archive = tar::Archive::new(buffer.as_slice());
+        archive.unpack(picked_location)?;
+
+        Ok(())
+    }
+
+    pub fn handle_export_to_folder(&self) {
+        match self.export_to_folder() {
             Ok(_) => {}
             Err(err) => eprintln!("Error while exporting: {err}")
         }
@@ -471,14 +498,13 @@ pub fn inline_validation_error(
 pub fn inline_layer_selector(
     ui: &mut Ui,
     label: impl Into<WidgetText>,
-    value: &mut u16,
-    multi_select: bool,
+    value: &mut u8,
     width: f32,
     tracker: &mut ChangeTracker
 ) {
     const BOX_SIZE: f32 = 15.0;
-    const COLUMNS: u16 = 8;
-    const ROWS: u16 = 2;
+    const COLUMNS: u8 = 8;
+    const ROWS: u8 = 4;
 
     ui.horizontal(|ui| {
         inline_style_label(ui, label, width);
@@ -502,12 +528,11 @@ pub fn inline_layer_selector(
                         vec2(BOX_SIZE, BOX_SIZE)
                     );
 
-                    let power = column + row * COLUMNS;
-                    let this = 1_u16 << power;
+                    let this = column + row * COLUMNS;
 
-                    let response = ui.interact(rect, parent_resp.id.with(power), Sense::click());
+                    let response = ui.interact(rect, parent_resp.id.with(this), Sense::click());
 
-                    let selected = *value & this != 0;
+                    let selected = *value == this;
 
                     let style = ui.style().interact_selectable(
                         &response, selected
@@ -522,19 +547,14 @@ pub fn inline_layer_selector(
                     );
 
                     if response.clicked() {
-                        if multi_select {
-                            *value = *value ^ this;
-                        } else {
-                            *value = this;
-                        }
-                        
+                        *value = this;
                         tracker.mark_change();
                     }
 
                     painter.text(
                         rect.center(),
                         Align2::CENTER_CENTER,
-                        power.to_string(),
+                        this.to_string(),
                         FontId::monospace(8.0),
                         style.text_color()
                     );
@@ -554,8 +574,12 @@ impl GuiPage for CharacterEditor {
             self.save_as();
         }
 
-        if ui.input(|k| k.modifiers.ctrl && k.key_pressed(Key::E)) {
+        if ui.input(|k| k.modifiers.ctrl && !k.modifiers.shift && k.key_pressed(Key::E)) {
             self.export();
+        }
+
+        if ui.input(|k| k.modifiers.ctrl && k.modifiers.shift && k.key_pressed(Key::E)) {
+            self.handle_export_to_folder();
         }
 
         let button_resp = TopBottomPanel::top("editor.top")
@@ -576,6 +600,10 @@ impl GuiPage for CharacterEditor {
 
                                 if ui.button("Export (Ctrl + E)").clicked() {
                                     self.export()
+                                }
+
+                                if ui.button("Export to Location (Ctrl + Shift + E)").clicked() {
+                                    self.handle_export_to_folder()
                                 }
 
                                 ui.separator();
