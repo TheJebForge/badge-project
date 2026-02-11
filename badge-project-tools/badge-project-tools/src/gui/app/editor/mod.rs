@@ -17,7 +17,7 @@ use crate::gui::app::util::{inline_style_label, pick_unique_name, ChangeTracker}
 use crate::gui::app::{util, BoxedGuiPage, GuiPage, PageResponse};
 use anyhow::anyhow;
 use egui::containers::menu::MenuButton;
-use egui::{vec2, Button, CentralPanel, Color32, ColorImage, ComboBox, Image, InnerResponse, Key, Sense, TextureHandle, TextureOptions, TopBottomPanel, Ui, WidgetText};
+use egui::{pos2, vec2, Align2, Button, CentralPanel, Color32, ColorImage, ComboBox, FontId, Image, InnerResponse, Key, Rect, Sense, Stroke, StrokeKind, TextureHandle, TextureOptions, TopBottomPanel, Ui, WidgetText};
 use egui_snarl::ui::SnarlStyle;
 use egui_snarl::Snarl;
 use std::cell::{RefCell, RefMut};
@@ -466,6 +466,80 @@ pub fn inline_validation_error(
             return;
         }
     }
+}
+
+pub fn inline_layer_selector(
+    ui: &mut Ui,
+    label: impl Into<WidgetText>,
+    value: &mut u16,
+    multi_select: bool,
+    width: f32,
+    tracker: &mut ChangeTracker
+) {
+    const BOX_SIZE: f32 = 15.0;
+    const COLUMNS: u16 = 8;
+    const ROWS: u16 = 2;
+
+    ui.horizontal(|ui| {
+        inline_style_label(ui, label, width);
+
+        let (parent_rect, parent_resp) = ui.allocate_exact_size(
+            vec2(BOX_SIZE * COLUMNS as f32, BOX_SIZE * ROWS as f32),
+            Sense::empty()
+        );
+
+
+        if ui.is_rect_visible(parent_rect) {
+            let painter = ui.painter_at(parent_rect);
+
+            for row in 0..ROWS {
+                let row_y = parent_rect.top() + BOX_SIZE * row as f32;
+
+                for column in 0..COLUMNS {
+                    let column_x = parent_rect.left() + BOX_SIZE * column as f32;
+                    let rect = Rect::from_min_size(
+                        pos2(column_x, row_y),
+                        vec2(BOX_SIZE, BOX_SIZE)
+                    );
+
+                    let power = column + row * COLUMNS;
+                    let this = 1_u16 << power;
+
+                    let response = ui.interact(rect, parent_resp.id.with(power), Sense::click());
+
+                    let selected = *value & this != 0;
+
+                    let style = ui.style().interact_selectable(
+                        &response, selected
+                    );
+
+                    painter.rect(
+                        rect,
+                        2.5,
+                        if selected { style.bg_fill } else { Color32::TRANSPARENT },
+                        Stroke::new(2.0, style.bg_fill),
+                        StrokeKind::Inside
+                    );
+
+                    if response.clicked() {
+                        if multi_select {
+                            *value = *value ^ this;
+                        } else {
+                            *value = this;
+                        }
+                    }
+
+                    painter.text(
+                        rect.center(),
+                        Align2::CENTER_CENTER,
+                        power.to_string(),
+                        FontId::monospace(8.0),
+                        style.text_color()
+                    );
+                }
+            }
+        }
+    });
 }
 
 impl GuiPage for CharacterEditor {

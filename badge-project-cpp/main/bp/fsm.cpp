@@ -2,6 +2,7 @@
 
 #include <fstream>
 #include <filesystem>
+#include <unordered_set>
 #include "esp_lcd_panel_ops.h"
 #include "esp_log.h"
 #include "esp_random.h"
@@ -129,7 +130,7 @@ void image_clicked(lv_event_t* event) {
     ESP_LOGI(TAG, "Image clicked!");
     auto* instance = static_cast<CharacterFSM*>(event->user_data);
 
-    for (const auto [_, transitions] = instance->get_current_state_sl();
+    for (const auto [_mask, _image, transitions] = instance->get_current_state_sl();
          const auto& [next_state, trigger]: transitions) {
         if (std::holds_alternative<data::StateTransitionClicked>(trigger)) {
             instance->switch_state_sl(next_state);
@@ -217,7 +218,9 @@ void CharacterFSM::load_character_sl(const std::string& name) {
     }
 
     bp::data::load_character_data(character_data, name);
-    bp::data::preload_data(preloaded_data, character_data);
+    bp::data::preload_layer_data(loaded_layer_data, character_data);
+
+    prepared_load_layer = character_data.default_load_layer();
 
     loaded_images = {};
     loaded_descriptors = {};
@@ -257,6 +260,113 @@ bool check_if_no_ram_sl(const std::size_t wanted_ram) {
 }
 
 static TaskHandle_t cooker_task_handle;
+static TaskHandle_t layer_loader_handle;
+
+constexpr auto LL_TAG = "layer_loader";
+void bp::layer_loader() {
+    TaskDeleteGuard guard{};
+
+    std::string target_state;
+    if (const auto& potential = char_fsm.preparing_load_layer_for; potential) {
+        target_state = potential.value();
+    } else {
+        ESP_LOGE(LL_TAG, "Target state wasn't properly set!");
+        return;
+    }
+
+    const auto& [layer, _image, _transitions] = char_fsm.character_data.states.at(target_state);
+
+    ESP_LOGI(LL_TAG, "Preparing %hu layer!", layer);
+
+    std::unordered_set<std::string> images_on_new_layer;
+    std::unordered_map<std::string, std::tuple<uint32_t, uint32_t>> image_size;
+    std::unordered_set<std::string> animations_on_new_layer;
+    std::unordered_map<std::string, const data::StateAnimation*> state_anims;
+
+    // Layer discovery
+    for (const auto& [state_name, state]: char_fsm.character_data.states) {
+        if (const auto* single = std::get_if<data::StateImage>(&state.image)) {
+            if (layer & single->load_layer_mask) {
+                images_on_new_layer.emplace(single->image_name);
+                image_size.emplace(
+                    single->image_name,
+                    std::make_tuple(single->width, single->height)
+                );
+            }
+        }
+
+        if (const auto* anim = std::get_if<data::StateAnimation>(&state.image)) {
+            if (layer & anim->load_layer_mask) {
+                animations_on_new_layer.emplace(anim->name);
+                state_anims.emplace(anim->name, anim);
+            }
+        }
+
+        if (const auto* sequence = std::get_if<data::StateSequence>(&state.image)) {
+            if (layer & sequence->load_layer_mask) {
+                for (const auto& frame: sequence->frames) {
+                    images_on_new_layer.emplace(frame.image_name);
+                    image_size.emplace(
+                        frame.image_name,
+                        std::make_tuple(frame.width, frame.height)
+                    );
+                }
+            }
+        }
+    }
+
+    // Writing down which images and animations to delete
+    std::unordered_set<std::string> unneeded_images;
+    std::unordered_set<std::string> unneeded_anims;
+
+    for (const auto& [image_name, _] : char_fsm.loaded_layer_data.image_data) {
+        if (!images_on_new_layer.contains(image_name)) {
+            unneeded_images.emplace(image_name);
+        }
+    }
+
+    for (const auto& [anim_name, _] : char_fsm.loaded_layer_data.animation_frames) {
+        if (!animations_on_new_layer.contains(anim_name)) {
+            unneeded_anims.emplace(anim_name);
+        }
+    }
+
+    char_fsm.layer_images_to_remove = unneeded_images;
+    char_fsm.layer_anims_to_remove = unneeded_anims;
+
+    // Load missing images and animations
+    for (const auto& image_name : images_on_new_layer) {
+        if (!char_fsm.loaded_layer_data.image_data.contains(image_name)) {
+            const auto& [width, height] = image_size.at(image_name);
+
+            data::preload_image(
+                char_fsm.loaded_layer_data, image_name, char_fsm.character_data.images_folder, width, height
+            );
+
+            vTaskDelay(COOKER_LOAD_DELAY);
+        }
+    }
+
+    for (const auto& anim_name : animations_on_new_layer) {
+        if (!char_fsm.loaded_layer_data.animation_frames.contains(anim_name)) {
+            const auto state_anim = state_anims.at(anim_name);
+            const auto& anim = char_fsm.character_data.animations.at(anim_name);
+
+            data::preload_animation(char_fsm.loaded_layer_data, *state_anim, anim, true);
+        }
+    }
+
+    // Done?
+    {
+        CriticalGuard lock(&char_fsm.spinlock);
+        char_fsm.prepared_load_layer = layer;
+        char_fsm.preparing_load_layer = false;
+        char_fsm.preparing_ui_dirty = true;
+        char_fsm.preparing_load_layer_for = std::nullopt;
+    }
+
+    char_fsm.switch_state_unchecked(target_state);
+}
 
 constexpr auto IMG_TAG = "single_image_cooker";
 void bp::single_image_cooker(const data::StateImage* image_state) {
@@ -292,7 +402,7 @@ void bp::single_image_cooker(const data::StateImage* image_state) {
     }
 
     descriptors.emplace_back(data::make_image_dsc(
-        image_state->has_alpha, image_state->width, image_state->height, inserted_image
+        image_state->width, image_state->height, inserted_image
     ));
 
     frames.emplace_back(std::move(inserted_image));
@@ -381,7 +491,7 @@ void bp::sequence_cooker(const data::StateSequence* sequence) {
             }
 
             descriptors.emplace_back(data::make_image_dsc(
-                seq_frame.has_alpha, seq_frame.width, seq_frame.height, inserted_image
+                seq_frame.width, seq_frame.height, inserted_image
             ));
 
             frames.emplace_back(std::move(inserted_image));
@@ -403,7 +513,7 @@ void bp::sequence_cooker(const data::StateSequence* sequence) {
         for (std::size_t index = 0; index < 2; index++) {
             if (const auto opt_image = image::allocator.allocate_image_data_sl(largest_frame_size)) {
                 ESP_LOGI(SEQ_TAG, "Allocated %x-%x for sequence buffer #%d", opt_image.value()->start(), opt_image.value()->end(), index);
-                frames.emplace_back(std::move(opt_image.value()));
+                frames.emplace_back(opt_image.value());
             } else {
                 ESP_LOGE(SEQ_TAG, "Failed to allocate %d bytes!", largest_frame_size);
                 char_fsm.done_cooking_sl(false);
@@ -429,7 +539,7 @@ void bp::sequence_cooker(const data::StateSequence* sequence) {
 
         const auto& seq_frame = sequence->frames.at(0);
         descriptors[0] = data::make_image_dsc(
-            seq_frame.has_alpha, seq_frame.width, seq_frame.height, first_image
+            seq_frame.width, seq_frame.height, first_image
         );
 
         char_fsm.set_cooking_progress(1, 1);
@@ -440,11 +550,9 @@ void bp::sequence_cooker(const data::StateSequence* sequence) {
     char_fsm.done_cooking_sl(true);
 }
 
-bool CharacterFSM::cook_if_needed(const std::string& state_name) const {
-    const auto& [image, _] = character_data.states.at(state_name);
-
+bool CharacterFSM::cook_if_needed(const data::StateImageVariant& image) const {
     if (const auto* image_state = std::get_if<data::StateImage>(&image)) {
-        if (image_state->preload) return false;
+        if (image_state->load_layer_mask & prepared_load_layer) return false;
 
         // Cook for image
         if (const portBASE_TYPE result = xTaskCreate(
@@ -462,7 +570,7 @@ bool CharacterFSM::cook_if_needed(const std::string& state_name) const {
     }
 
     if (const auto* anim_state = std::get_if<data::StateAnimation>(&image)) {
-        if (anim_state->preload) return false;
+        if (anim_state->load_layer_mask & prepared_load_layer) return false;
         if (const auto& anim_desc = character_data.animations.at(anim_state->name);
             anim_desc.mode != data::AnimationMode::FromRAM) return false;
 
@@ -482,7 +590,7 @@ bool CharacterFSM::cook_if_needed(const std::string& state_name) const {
     }
 
     if (const auto* sequence_state = std::get_if<data::StateSequence>(&image)) {
-        if (sequence_state->mode == data::SequenceLoadMode::Preload) return false;
+        if (sequence_state->load_layer_mask & prepared_load_layer) return false;
 
         // Cook for sequence frames
         if (const portBASE_TYPE result = xTaskCreate(
@@ -515,15 +623,27 @@ void CharacterFSM::set_cooking_progress(const int32_t current, const int32_t max
     new_cooking_max = max;
 }
 
-void CharacterFSM::update_cooking_progress_if_needed() {
-    bool dirty;
+void CharacterFSM::update_progress_if_needed() {
+    bool cooking, layer_loading;
 
     {
         CriticalGuard guard(&spinlock);
-        dirty = cooking_progress_dirty;
+
+        cooking = cooking_progress_dirty;
+        layer_loading = preparing_ui_dirty;
+
+        cooking_progress_dirty = false;
+        preparing_ui_dirty = false;
     }
 
-    if (dirty) {
+    if (layer_loading) {
+        LVGLLockGuard guard(0);
+
+        lv_obj_set_flag(progress_box_obj, LV_OBJ_FLAG_HIDDEN, !preparing_load_layer);
+        lv_obj_set_size(progress_bar_obj, DISPLAY_WIDTH, PROGRESS_BAR_HEIGHT);
+    }
+
+    if (cooking) {
         LVGLLockGuard guard(0);
 
         lv_obj_set_flag(progress_box_obj, LV_OBJ_FLAG_HIDDEN, !new_cooking_visible);
@@ -544,7 +664,39 @@ void CharacterFSM::switch_state_internal(const std::string& state_name) {
 }
 
 void CharacterFSM::switch_state_unchecked(const std::string& state_name) {
-    if (!cook_if_needed(state_name)) {
+    const auto& [
+        layer,
+        image,
+        _transitions
+    ] = character_data.states.at(state_name);
+
+    if (layer != prepared_load_layer) {
+        if (preparing_load_layer) return;
+
+        // Need to load extra images
+        {
+            CriticalGuard lock(&spinlock);
+
+            preparing_ui_dirty = true;
+            preparing_load_layer = true;
+            preparing_load_layer_for = state_name;
+        }
+
+        if (const portBASE_TYPE result = xTaskCreate(
+            reinterpret_cast<TaskFunction_t>(layer_loader),
+            LL_TAG,
+            COOKER_STACK,
+            nullptr,
+            configMAX_PRIORITIES / 2,
+            &layer_loader_handle
+        ); result != pdPASS) {
+            ESP_LOGE(TAG, "Failed to start layer loader task! %d", result);
+        }
+
+        return;
+    }
+
+    if (!cook_if_needed(image)) {
         ESP_LOGI(TAG, "Switching to '%s' state", state_name.c_str());
 
         CriticalGuard guard(&spinlock);
@@ -553,6 +705,7 @@ void CharacterFSM::switch_state_unchecked(const std::string& state_name) {
         // Clear unnecessary memory
         loaded_images = {};
         loaded_descriptors = {};
+        remove_unneeded_layer_date();
     } else {
         ESP_LOGI(TAG, "'%s' state needs to be cooked first, started task", state_name.c_str());
 
@@ -635,7 +788,6 @@ void CharacterFSM::done_cooking_sl(const bool success) {
         state_is_cooking = false;
 
         switch_state_internal(being_cooked_state);
-
     } else {
         ESP_LOGI(TAG, "Cooker failed :(");
 
@@ -644,6 +796,20 @@ void CharacterFSM::done_cooking_sl(const bool success) {
     }
 
     set_progress_visible(false);
+    remove_unneeded_layer_date();
+}
+
+void CharacterFSM::remove_unneeded_layer_date() {
+    for (const auto& image_name : layer_images_to_remove) {
+        loaded_layer_data.image_data.erase(image_name);
+    }
+
+    for (const auto& anim_name : layer_anims_to_remove) {
+        loaded_layer_data.animation_frames.erase(anim_name);
+    }
+
+    layer_images_to_remove = {};
+    layer_anims_to_remove = {};
 }
 
 static lv_timer_t* error_hide_timer_handle = nullptr;
@@ -708,7 +874,7 @@ bool CharacterFSM::is_data_in_use() {
 
 bool CharacterFSM::is_free_sl() {
     CriticalGuard guard(&spinlock);
-    return !(busy || state_is_cooking);
+    return !(busy || state_is_cooking || preparing_load_layer);
 }
 
 bool CharacterFSM::is_busy_sl() {
@@ -833,9 +999,9 @@ void CharacterFSM::play_animation(
 
     FrameTimer timer{animation_desc.interval_us};
 
-    if (state_desc.preload) {
+    if (state_desc.load_layer_mask & prepared_load_layer) {
         for (int repeat = 0; repeat < state_desc.loop_count; repeat++) {
-            for (const auto& frame: preloaded_data.animation_frames.at(state_desc.name)) {
+            for (const auto& frame: loaded_layer_data.animation_frames.at(state_desc.name)) {
                 timer.frame_start();
 
                 uint8_t* frame_ptr = frame->data();
@@ -952,8 +1118,8 @@ void CharacterFSM::set_ui_image(const data::StateImageVariant& variant) {
     ui_dirty = false;
 
     if (const auto* image_desc = std::get_if<data::StateImage>(&variant)) {
-        if (image_desc->preload) {
-            const auto& [dsc, ptr] = preloaded_data.image_data.at(image_desc->image_name);
+        if (image_desc->load_layer_mask & prepared_load_layer) {
+            const auto& [dsc, ptr] = loaded_layer_data.image_data.at(image_desc->image_name);
             update_display(ptr, dsc, image_desc->upscale);
         } else {
             update_display(loaded_images[0], loaded_descriptors[0], image_desc->upscale);
@@ -980,57 +1146,58 @@ void CharacterFSM::set_ui_image(const data::StateImageVariant& variant) {
 
             next_frame_time = esp_timer_get_time() + frame.duration_us;
 
-            switch (sequence_desc->mode) {
-                case data::SequenceLoadMode::Preload: {
-                    const auto& [dsc, ptr] = preloaded_data.image_data.at(frame.image_name);
+            if (sequence_desc->load_layer_mask & prepared_load_layer) {
+                const auto& [dsc, ptr] = loaded_layer_data.image_data.at(frame.image_name);
 
-                    update_display(ptr, dsc, frame.upscale);
+                update_display(ptr, dsc, frame.upscale);
+            } else {
+                switch (sequence_desc->mode) {
+                    case data::SequenceLoadMode::LoadAll: {
+                        update_display(
+                            loaded_images[current_sequence_index],
+                            loaded_descriptors[current_sequence_index],
+                            frame.upscale
+                        );
 
-                    break;
-                }
-
-                case data::SequenceLoadMode::LoadAll: {
-                    update_display(
-                        loaded_images[current_sequence_index],
-                        loaded_descriptors[current_sequence_index],
-                        frame.upscale
-                    );
-
-                    break;
-                }
-
-                case data::SequenceLoadMode::LoadEach: {
-                    const auto ready_frame_index = current_sequence_index % 2;
-                    const auto offscreen_frame_index = (ready_frame_index + 1) % 2;
-
-                    update_display(
-                        loaded_images[ready_frame_index],
-                        loaded_descriptors[ready_frame_index],
-                        frame.upscale
-                    );
-
-                    ESP_LOGI(IMG_TAG, "Setting #%l to screen", current_sequence_index);
-
-                    const auto next_sequence_index = (current_sequence_index + 1) % sequence_desc->frames.size();
-
-                    const auto& offscreen_image = loaded_images[offscreen_frame_index];
-                    const auto& seq_frame = sequence_desc->frames.at(next_sequence_index);
-
-                    {
-                        if (!seq_frame.image_exists(character_data)) {
-                            return;
-                        }
-
-                        ESP_LOGI(TAG, "Writing frame into %x-%x for #%d", offscreen_image->start(), offscreen_image->end(), next_sequence_index);
-
-                        seq_frame.load_image(character_data, offscreen_image->span());
+                        break;
                     }
 
-                    loaded_descriptors[offscreen_frame_index] = data::make_image_dsc(
-                        seq_frame.has_alpha, seq_frame.width, seq_frame.height, offscreen_image
-                    );
+                    case data::SequenceLoadMode::LoadEach: {
+                        const auto ready_frame_index = current_sequence_index % 2;
+                        const auto offscreen_frame_index = (ready_frame_index + 1) % 2;
 
-                    break;
+                        update_display(
+                            loaded_images[ready_frame_index],
+                            loaded_descriptors[ready_frame_index],
+                            frame.upscale
+                        );
+
+                        ESP_LOGI(IMG_TAG, "Setting #%l to screen", current_sequence_index);
+
+                        const auto next_sequence_index = (current_sequence_index + 1) % sequence_desc->frames.size();
+
+                        const auto& offscreen_image = loaded_images[offscreen_frame_index];
+                        const auto& seq_frame = sequence_desc->frames.at(next_sequence_index);
+
+                        {
+                            if (!seq_frame.image_exists(character_data)) {
+                                return;
+                            }
+
+                            ESP_LOGI(
+                                TAG, "Writing frame into %x-%x for #%d", offscreen_image->start(),
+                                offscreen_image->end(), next_sequence_index
+                            );
+
+                            seq_frame.load_image(character_data, offscreen_image->span());
+                        }
+
+                        loaded_descriptors[offscreen_frame_index] = data::make_image_dsc(
+                            seq_frame.width, seq_frame.height, offscreen_image
+                        );
+
+                        break;
+                    }
                 }
             }
         }
@@ -1049,13 +1216,13 @@ void CharacterFSM::tick() {
     const auto time_since_transition = now - last_transition_time;
 
     try {
-        auto& [image, transitions] = get_current_state_sl();
+        auto& [_, image, transitions] = get_current_state_sl();
 
         if (ui_dirty || (current_sequence_index != -1 && now > next_frame_time)) {
             set_ui_image(image);
         }
 
-        update_cooking_progress_if_needed();
+        update_progress_if_needed();
         address_queue();
 
         if (!state_is_cooking) {

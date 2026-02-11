@@ -1,4 +1,6 @@
 #pragma once
+
+#include <unordered_set>
 #include "data/character.hpp"
 #include "data/image.hpp"
 #include "init/bluetooth.hpp"
@@ -13,6 +15,7 @@ namespace bp {
     };
 
     ClientCommandResponse bluetooth_command_handler(uint8_t op, std::span<char, 200> data);
+    void layer_loader();
     void single_image_cooker(const data::StateImage* image_state);
     void animation_cooker(const data::StateAnimation* anim_state);
     void sequence_cooker(const data::StateSequence* sequence);
@@ -24,7 +27,7 @@ namespace bp {
 
         // Character data
         data::Character character_data;
-        data::PreloadedData preloaded_data;
+        data::LoadedLayerData loaded_layer_data;
 
         // FSM State
         std::string current_state;
@@ -33,6 +36,13 @@ namespace bp {
         int64_t next_frame_time = 0;
         std::optional<std::string> queued_state;
         std::unordered_map<std::string, int64_t> random_durations{};
+
+        uint16_t prepared_load_layer;
+        bool preparing_load_layer = false;
+        std::optional<std::string> preparing_load_layer_for;
+        bool preparing_ui_dirty = false;
+        std::unordered_set<std::string> layer_images_to_remove;
+        std::unordered_set<std::string> layer_anims_to_remove;
 
         std::string being_cooked_state;
         bool state_is_cooking = false;
@@ -98,11 +108,13 @@ namespace bp {
         int64_t get_random_duration(const std::string& state_name, const data::StateTransitionRandom& rng_specs, int64_t time_since_transition);
         void clear_random_duration(const std::string& state_name);
 
-        bool cook_if_needed(const std::string& state_name) const;
+        bool cook_if_needed(const data::StateImageVariant& image) const;
         void set_progress_visible(bool visibility);
         void set_cooking_progress(int32_t current, int32_t max);
-        void update_cooking_progress_if_needed();
+        void update_progress_if_needed();
         void done_cooking_sl(bool success);
+
+        void remove_unneeded_layer_date();
 
         void display_error(const std::string& error) const;
 
@@ -120,6 +132,7 @@ namespace bp {
         void tick();
 
         friend ClientCommandResponse bluetooth_command_handler(uint8_t, std::span<char, 200>);
+        friend void layer_loader();
         friend void single_image_cooker(const data::StateImage* image_state);
         friend void animation_cooker(const data::StateAnimation* anim_state);
         friend void sequence_cooker(const data::StateSequence* sequence);

@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use crate::character::util::{any_as_u8_vec, string_to_char_array, TuplePick};
-use crate::{bp_character_action_e_BP_CHARACTER_ACTION_SWITCH_STATE, bp_character_action_file_s, bp_character_action_u, bp_character_animation_file_s, bp_character_animation_mode_e_BP_CHARACTER_ANIMATION_MODE_FROM_RAM, bp_character_animation_mode_e_BP_CHARACTER_ANIMATION_MODE_FROM_SDCARD, bp_character_file_s, bp_character_image_descriptor_s, bp_character_sequence_mode_e_BP_CHARACTER_SEQUENCE_MODE_LOAD_ALL, bp_character_sequence_mode_e_BP_CHARACTER_SEQUENCE_MODE_LOAD_EACH, bp_character_sequence_mode_e_BP_CHARACTER_SEQUENCE_MODE_PRELOAD, bp_character_state_animation_descriptor_s, bp_character_state_file_s, bp_character_state_image_e_BP_CHARACTER_STATE_ANIMATION, bp_character_state_image_e_BP_CHARACTER_STATE_NO_IMAGE, bp_character_state_image_e_BP_CHARACTER_STATE_SEQUENCE, bp_character_state_image_e_BP_CHARACTER_STATE_SINGLE_IMAGE, bp_character_state_image_u, bp_character_state_sequence_descriptor_s, bp_data_FORMAT_VERSION, bp_sequence_frame_file_s, bp_state_transition_file_s, bp_state_trigger_e_BP_STATE_TRIGGER_CLICKED, bp_state_trigger_e_BP_STATE_TRIGGER_ELAPSED_TIME, bp_state_trigger_e_BP_STATE_TRIGGER_RANDOM, bp_state_trigger_random_s, bp_state_trigger_s, bp_state_trigger_u};
+use crate::{bp_character_action_e_BP_CHARACTER_ACTION_SWITCH_STATE, bp_character_action_file_s, bp_character_action_u, bp_character_animation_file_s, bp_character_animation_mode_e_BP_CHARACTER_ANIMATION_MODE_FROM_RAM, bp_character_animation_mode_e_BP_CHARACTER_ANIMATION_MODE_FROM_SDCARD, bp_character_file_s, bp_character_image_descriptor_s, bp_character_sequence_mode_e_BP_CHARACTER_SEQUENCE_MODE_LOAD_ALL, bp_character_sequence_mode_e_BP_CHARACTER_SEQUENCE_MODE_LOAD_EACH, bp_character_state_animation_descriptor_s, bp_character_state_file_s, bp_character_state_image_e_BP_CHARACTER_STATE_ANIMATION, bp_character_state_image_e_BP_CHARACTER_STATE_NO_IMAGE, bp_character_state_image_e_BP_CHARACTER_STATE_SEQUENCE, bp_character_state_image_e_BP_CHARACTER_STATE_SINGLE_IMAGE, bp_character_state_image_u, bp_character_state_sequence_descriptor_s, bp_data_FORMAT_VERSION, bp_sequence_frame_file_s, bp_state_transition_file_s, bp_state_trigger_e_BP_STATE_TRIGGER_CLICKED, bp_state_trigger_e_BP_STATE_TRIGGER_ELAPSED_TIME, bp_state_trigger_e_BP_STATE_TRIGGER_RANDOM, bp_state_trigger_random_s, bp_state_trigger_s, bp_state_trigger_u};
 use serde::{Deserialize, Serialize};
 use std::ffi::NulError;
 use std::path::PathBuf;
@@ -41,6 +41,7 @@ impl Character {
             default_state: "idle".to_string(),
             states: HashMap::from([
                 ("idle".to_string(), State {
+                    layer: default_state_layer(),
                     image: StateImage::None,
                     transitions: vec![],
                     node_pos: None,
@@ -54,11 +55,17 @@ impl Character {
 
 #[derive(Deserialize, Serialize, Clone, Debug, Default)]
 pub struct State {
+    #[serde(default = "default_state_layer")]
+    pub layer: u16,
     pub image: StateImage,
     #[serde(default)]
     pub transitions: Vec<StateTransition>,
     #[serde(default)]
     pub node_pos: Option<(f32, f32)>
+}
+
+fn default_state_layer() -> u16 {
+    1
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug, Default)]
@@ -71,24 +78,24 @@ pub enum StateImage {
         width: u32,
         height: u32,
         #[serde(default)]
-        alpha: bool,
-        #[serde(default)]
         upscale: bool,
         #[serde(default)]
-        preload: bool
+        load_mask: u16
     },
     Animation {
         name: String,
         next_state: String,
         loop_count: u16,
         #[serde(default)]
-        preload: bool
+        load_mask: u16
     },
     Sequence {
         #[serde(default)]
         name: Option<String>,
         frames: Vec<SequenceFrame>,
-        mode: SequenceMode
+        mode: SequenceMode,
+        #[serde(default)]
+        load_mask: u16
     }
 }
 
@@ -190,8 +197,7 @@ pub enum AnimationMode {
 pub enum SequenceMode {
     LoadAll,
     #[default]
-    LoadEach,
-    Preload
+    LoadEach
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
@@ -200,8 +206,6 @@ pub struct SequenceFrame {
     pub path: PathBuf,
     pub width: u32,
     pub height: u32,
-    #[serde(default)]
-    pub alpha: bool,
     #[serde(default)]
     pub upscale: bool,
     pub duration: i64
@@ -243,7 +247,6 @@ impl BinaryRepr for SequenceFrame {
             image_name: string_to_char_array(&self.name)?,
             width: self.width,
             height: self.height,
-            has_alpha: self.alpha,
             upscale: self.upscale,
             duration_us: self.duration,
         };
@@ -349,50 +352,53 @@ impl BinaryRepr for State {
         let file = match &self.image {
             StateImage::None => {
                 bp_character_state_file_s {
+                    load_layer: self.layer,
                     image_type: bp_character_state_image_e_BP_CHARACTER_STATE_NO_IMAGE,
                     image: bp_character_state_image_u {
                         no_data: 0
                     },
                 }
             },
-            StateImage::Single { name, width, height, alpha, upscale, preload, .. } => {
+            StateImage::Single { name, width, height, upscale, load_mask, .. } => {
                 bp_character_state_file_s {
+                    load_layer: self.layer,
                     image_type: bp_character_state_image_e_BP_CHARACTER_STATE_SINGLE_IMAGE,
                     image: bp_character_state_image_u {
                         image: bp_character_image_descriptor_s {
                             image_name: string_to_char_array(name)?,
                             width: if *upscale { *width / 2 } else { *width },
                             height: if *upscale { *height / 2 } else { *height },
-                            has_alpha: *alpha,
                             upscale: *upscale,
-                            preload: *preload
+                            load_layer_mask: *load_mask,
                         }
                     },
                 }
             }
-            StateImage::Animation { name, next_state, loop_count, preload } => {
+            StateImage::Animation { name, next_state, loop_count, load_mask } => {
                 bp_character_state_file_s {
+                    load_layer: self.layer,
                     image_type: bp_character_state_image_e_BP_CHARACTER_STATE_ANIMATION,
                     image: bp_character_state_image_u {
                         animation: bp_character_state_animation_descriptor_s {
                             name: string_to_char_array(name)?,
                             next_state: string_to_char_array(next_state)?,
                             loop_count: *loop_count,
-                            preload: *preload
+                            load_layer_mask: *load_mask
                         }
                     }
                 }
             },
-            StateImage::Sequence { frames, mode, .. } => {
+            StateImage::Sequence { frames, mode, load_mask, ..} => {
                 bp_character_state_file_s {
+                    load_layer: self.layer,
                     image_type: bp_character_state_image_e_BP_CHARACTER_STATE_SEQUENCE,
                     image: bp_character_state_image_u {
                         sequence: bp_character_state_sequence_descriptor_s {
+                            load_layer_mask: *load_mask,
                             frame_count: frames.len() as u16,
                             mode: match mode {
                                 SequenceMode::LoadAll => bp_character_sequence_mode_e_BP_CHARACTER_SEQUENCE_MODE_LOAD_ALL,
-                                SequenceMode::LoadEach => bp_character_sequence_mode_e_BP_CHARACTER_SEQUENCE_MODE_LOAD_EACH,
-                                SequenceMode::Preload => bp_character_sequence_mode_e_BP_CHARACTER_SEQUENCE_MODE_PRELOAD
+                                SequenceMode::LoadEach => bp_character_sequence_mode_e_BP_CHARACTER_SEQUENCE_MODE_LOAD_EACH
                             }
                         }
                     }

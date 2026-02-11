@@ -60,9 +60,8 @@ struct bp_character_image_descriptor_s {
     char image_name[bp::data::IMAGE_NAME_MAX_LEN];
     uint32_t width;
     uint32_t height;
-    bool has_alpha;
     bool upscale;
-    bool preload;
+    uint16_t load_layer_mask;
 };
 
 /// Describes how animation will be loaded and played
@@ -94,7 +93,7 @@ struct bp_character_state_animation_descriptor_s {
     char name[bp::data::ANIMATION_NAME_MAX_LEN];
     char next_state[bp::data::STATE_NAME_MAX_LEN];
     uint16_t loop_count;
-    bool preload;
+    uint16_t load_layer_mask;
 };
 
 /// (frames/<index>.bin) File representing a frame in a sequence of images
@@ -102,7 +101,6 @@ struct bp_sequence_frame_file_s {
     char image_name[bp::data::IMAGE_NAME_MAX_LEN];
     uint32_t width;
     uint32_t height;
-    bool has_alpha;
     bool upscale;
     int64_t duration_us;
 };
@@ -111,14 +109,14 @@ struct bp_sequence_frame_file_s {
 /// load new frame each time, or preload all frames
 enum bp_character_sequence_mode_e {
     BP_CHARACTER_SEQUENCE_MODE_LOAD_ALL,
-    BP_CHARACTER_SEQUENCE_MODE_LOAD_EACH,
-    BP_CHARACTER_SEQUENCE_MODE_PRELOAD
+    BP_CHARACTER_SEQUENCE_MODE_LOAD_EACH
 };
 
 /// Describes data when state is a sequence
 struct bp_character_state_sequence_descriptor_s {
     uint16_t frame_count;
     bp_character_sequence_mode_e mode;
+    uint16_t load_layer_mask;
 };
 
 /// Enum for deciding what the state should currently show
@@ -139,6 +137,7 @@ union bp_character_state_image_u {
 
 /// (state.bin) Definition of character's state
 struct bp_character_state_file_s {
+    uint16_t load_layer;
     bp_character_state_image_e image_type;
     bp_character_state_image_u image;
 };

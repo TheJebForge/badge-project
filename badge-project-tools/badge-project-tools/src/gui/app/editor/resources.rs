@@ -93,7 +93,6 @@ impl CharacterEditor {
 
                                 inline_drag_value(ui, "Width:", &mut borrowed.width, TEXT_WIDTH, tracker);
                                 inline_drag_value(ui, "Height:", &mut borrowed.height, TEXT_WIDTH, tracker);
-                                inline_checkbox(ui, "Alpha:", &mut borrowed.alpha, TEXT_WIDTH, tracker);
                                 inline_checkbox(ui, "Upscale:", &mut borrowed.upscale, TEXT_WIDTH, tracker);
                             }, &mut self.tracker)
                         });

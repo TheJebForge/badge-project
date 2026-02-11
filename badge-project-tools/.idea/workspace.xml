@@ -15,7 +15,24 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="a1adc736-dd13-4dc0-93b4-2fe3353375b1" name="Changes" comment="Sequence into separate resource, updated UI for the badge">
+      <change beforePath="$PROJECT_DIR$/../badge-project-cpp/main/bp/data/character.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/../badge-project-cpp/main/bp/data/character.cpp" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../badge-project-cpp/main/bp/data/character.hpp" beforeDir="false" afterPath="$PROJECT_DIR$/../badge-project-cpp/main/bp/data/character.hpp" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../badge-project-cpp/main/bp/data/format.hpp" beforeDir="false" afterPath="$PROJECT_DIR$/../badge-project-cpp/main/bp/data/format.hpp" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../badge-project-cpp/main/bp/data/image.hpp" beforeDir="false" afterPath="$PROJECT_DIR$/../badge-project-cpp/main/bp/data/image.hpp" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../badge-project-cpp/main/bp/fsm.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/../badge-project-cpp/main/bp/fsm.cpp" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../badge-project-cpp/main/bp/fsm.hpp" beforeDir="false" afterPath="$PROJECT_DIR$/../badge-project-cpp/main/bp/fsm.hpp" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../badge-project-cpp/sdkconfig" beforeDir="false" afterPath="$PROJECT_DIR$/../badge-project-cpp/sdkconfig" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/badge-project-tools/src/character/mod.rs" beforeDir="false" afterPath="$PROJECT_DIR$/badge-project-tools/src/character/mod.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/badge-project-tools/src/character/repr.rs" beforeDir="false" afterPath="$PROJECT_DIR$/badge-project-tools/src/character/repr.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/badge-project-tools/src/gui/app/editor/intermediate.rs" beforeDir="false" afterPath="$PROJECT_DIR$/badge-project-tools/src/gui/app/editor/intermediate.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/badge-project-tools/src/gui/app/editor/mod.rs" beforeDir="false" afterPath="$PROJECT_DIR$/badge-project-tools/src/gui/app/editor/mod.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/badge-project-tools/src/gui/app/editor/nodes.rs" beforeDir="false" afterPath="$PROJECT_DIR$/badge-project-tools/src/gui/app/editor/nodes.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/badge-project-tools/src/gui/app/editor/resources.rs" beforeDir="false" afterPath="$PROJECT_DIR$/badge-project-tools/src/gui/app/editor/resources.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/badge-project-tools/src/gui/app/editor/simulator.rs" beforeDir="false" afterPath="$PROJECT_DIR$/badge-project-tools/src/gui/app/editor/simulator.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/badge-project-tools/src/image.rs" beforeDir="false" afterPath="$PROJECT_DIR$/badge-project-tools/src/image.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/badge-project-tools/test.json" beforeDir="false" afterPath="$PROJECT_DIR$/badge-project-tools/test.json" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/badge-project-tools/test.tar" beforeDir="false" afterPath="$PROJECT_DIR$/badge-project-tools/test.tar" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -49,29 +66,29 @@
     <option name="hideEmptyMiddlePackages" value="true" />
     <option name="showLibraryContents" value="true" />
   </component>
-  <component name="PropertiesComponent">{
-  &quot;keyToString&quot;: {
-    &quot;Cargo.Build `Run GUI`.executor&quot;: &quot;Run&quot;,
-    &quot;Cargo.Run GUI.executor&quot;: &quot;Run&quot;,
-    &quot;Cargo.Run bp-tools.executor&quot;: &quot;Run&quot;,
-    &quot;ModuleVcsDetector.initialDetectionPerformed&quot;: &quot;true&quot;,
-    &quot;RunOnceActivity.ShowReadmeOnStart&quot;: &quot;true&quot;,
-    &quot;RunOnceActivity.TerminalTabsStorage.copyFrom.TerminalArrangementManager.252&quot;: &quot;true&quot;,
-    &quot;RunOnceActivity.rust.reset.selective.auto.import&quot;: &quot;true&quot;,
-    &quot;RunOnceActivity.typescript.service.memoryLimit.init&quot;: &quot;true&quot;,
-    &quot;git-widget-placeholder&quot;: &quot;main&quot;,
-    &quot;node.js.detected.package.eslint&quot;: &quot;true&quot;,
-    &quot;node.js.detected.package.tslint&quot;: &quot;true&quot;,
-    &quot;node.js.selected.package.eslint&quot;: &quot;(autodetect)&quot;,
-    &quot;node.js.selected.package.tslint&quot;: &quot;(autodetect)&quot;,
-    &quot;nodejs_package_manager_path&quot;: &quot;npm&quot;,
-    &quot;org.rust.cargo.project.model.PROJECT_DISCOVERY&quot;: &quot;true&quot;,
-    &quot;org.rust.cargo.project.model.impl.CargoExternalSystemProjectAware.subscribe.first.balloon&quot;: &quot;&quot;,
-    &quot;org.rust.first.attach.projects&quot;: &quot;true&quot;,
-    &quot;settings.editor.selected.configurable&quot;: &quot;project.propVCSSupport.DirectoryMappings&quot;,
-    &quot;vue.rearranger.settings.migration&quot;: &quot;true&quot;
+  <component name="PropertiesComponent"><![CDATA[{
+  "keyToString": {
+    "Cargo.Build `Run GUI`.executor": "Run",
+    "Cargo.Run GUI.executor": "Run",
+    "Cargo.Run bp-tools.executor": "Run",
+    "ModuleVcsDetector.initialDetectionPerformed": "true",
+    "RunOnceActivity.ShowReadmeOnStart": "true",
+    "RunOnceActivity.TerminalTabsStorage.copyFrom.TerminalArrangementManager.252": "true",
+    "RunOnceActivity.rust.reset.selective.auto.import": "true",
+    "RunOnceActivity.typescript.service.memoryLimit.init": "true",
+    "git-widget-placeholder": "main",
+    "node.js.detected.package.eslint": "true",
+    "node.js.detected.package.tslint": "true",
+    "node.js.selected.package.eslint": "(autodetect)",
+    "node.js.selected.package.tslint": "(autodetect)",
+    "nodejs_package_manager_path": "npm",
+    "org.rust.cargo.project.model.PROJECT_DISCOVERY": "true",
+    "org.rust.cargo.project.model.impl.CargoExternalSystemProjectAware.subscribe.first.balloon": "",
+    "org.rust.first.attach.projects": "true",
+    "settings.editor.selected.configurable": "project.propVCSSupport.DirectoryMappings",
+    "vue.rearranger.settings.migration": "true"
   }
-}</component>
+}]]></component>
   <component name="RunManager" selected="Cargo.Run GUI">
     <configuration name="Run GUI" type="CargoCommandRunConfiguration" factoryName="Cargo Command">
       <option name="buildProfileId" value="dev" />
@@ -132,6 +149,8 @@
       <workItem from="1769757847648" duration="27313000" />
       <workItem from="1769862485884" duration="1501000" />
       <workItem from="1769940598253" duration="6852000" />
+      <workItem from="1770764778851" duration="8624000" />
+      <workItem from="1770831533093" duration="3036000" />
     </task>
     <task id="LOCAL-00001" summary="Most of GUI work is done">
       <option name="closed" value="true" />
@@ -203,5 +222,16 @@
     <MESSAGE value="Fixed image pickers breaking, fixed selection when state delete" />
     <MESSAGE value="Sequence into separate resource, updated UI for the badge" />
     <option name="LAST_COMMIT_MESSAGE" value="Sequence into separate resource, updated UI for the badge" />
+  </component>
+  <component name="XDebuggerManager">
+    <breakpoint-manager>
+      <breakpoints>
+        <line-breakpoint enabled="true" type="com.jetbrains.cidr.execution.debugger.OCBreakpointType">
+          <url>file://$PROJECT_DIR$/badge-project-tools/src/gui/app/editor/simulator.rs</url>
+          <line>410</line>
+          <option name="timeStamp" value="6" />
+        </line-breakpoint>
+      </breakpoints>
+    </breakpoint-manager>
   </component>
 </project>

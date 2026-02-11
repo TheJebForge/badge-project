@@ -47,11 +47,23 @@ impl InterAction {
     }
 }
 
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug)]
 pub struct InterState {
+    pub layer: u16,
     pub image: InterStateImage,
     pub transitions: Vec<SharedInterStateTransition>,
     pub node_pos: Pos2
+}
+
+impl Default for InterState {
+    fn default() -> Self {
+        Self {
+            layer: 1,
+            image: Default::default(),
+            transitions: vec![],
+            node_pos: Default::default(),
+        }
+    }
 }
 
 pub type SharedInterState = Rc<RefCell<InterState>>;
@@ -68,27 +80,28 @@ impl InterState {
             StateImage::None => InterStateImage::None,
             StateImage::Single {
                 name,
-                preload,
+                load_mask,
                 ..
             } => InterStateImage::Single {
                 image: images.iter().find(|(k, _)| k.str_eq(&name))?.0.clone(),
-                preload,
+                load_mask,
             },
             StateImage::Animation {
                 name,
                 next_state,
                 loop_count,
-                preload
+                load_mask
             } => InterStateImage::Animation {
                 animation: animations.iter().find(|(k, _)| k.str_eq(&name))?.0.clone(),
                 next_state: names.iter().find(|k| k.str_eq(&next_state))?.clone(),
                 loop_count,
-                preload,
+                load_mask,
             },
             StateImage::Sequence {
                 name,
                 frames,
-                mode
+                mode,
+                load_mask
             } => {
                 let from_frames = |frames: Vec<SequenceFrame>| {
                     InterSequence {
@@ -121,6 +134,7 @@ impl InterState {
                 InterStateImage::Sequence {
                     sequence,
                     mode,
+                    load_mask
                 }
             }
         };
@@ -141,6 +155,7 @@ impl InterState {
         };
 
         Some(InterState {
+            layer: state.layer,
             image,
             transitions,
             node_pos
@@ -153,10 +168,11 @@ impl InterState {
         sequences: &Vec<(SharedString, InterSequence)>
     ) -> Option<State> {
         Some(State {
+            layer: self.layer,
             image: match self.image {
                 InterStateImage::None => StateImage::None,
                 InterStateImage::Single {
-                    image, preload
+                    image, load_mask
                 } => {
                     let image_data = images.iter().find(|(k, _)| k == &image)?.1.borrow().clone();
 
@@ -165,21 +181,20 @@ impl InterState {
                         path: image_data.path,
                         width: image_data.width,
                         height: image_data.height,
-                        alpha: image_data.alpha,
                         upscale: image_data.upscale,
-                        preload,
+                        load_mask,
                     }
                 },
                 InterStateImage::Animation {
-                    animation, next_state, loop_count, preload
+                    animation, next_state, loop_count, load_mask
                 } => StateImage::Animation {
                     name: animation.to_string(),
                     next_state: next_state.to_string(),
                     loop_count,
-                    preload,
+                    load_mask,
                 },
                 InterStateImage::Sequence {
-                    sequence, mode
+                    sequence, mode, load_mask
                 } => {
                     let sequence_data = sequences.iter()
                         .find(|(k, _)| k == &sequence)?.1.clone();
@@ -195,13 +210,13 @@ impl InterState {
                                     path: image.path,
                                     width: image.width,
                                     height: image.height,
-                                    alpha: image.alpha,
                                     upscale: image.upscale,
                                     duration: e.duration,
                                 })
                             })
                             .collect(),
                         mode,
+                        load_mask
                     }
                 }
             },
@@ -219,17 +234,18 @@ pub enum InterStateImage {
     None,
     Single {
         image: SharedString,
-        preload: bool
+        load_mask: u16
     },
     Animation {
         animation: SharedString,
         next_state: SharedString,
         loop_count: u16,
-        preload: bool
+        load_mask: u16
     },
     Sequence {
         sequence: SharedString,
-        mode: SequenceMode
+        mode: SequenceMode,
+        load_mask: u16
     }
 }
 
@@ -278,7 +294,6 @@ pub struct LoadedImage {
     pub image: DynamicImage,
     pub width: u32,
     pub height: u32,
-    pub alpha: bool,
     pub upscale: bool,
     pub handle: Option<TextureHandle>
 }
@@ -290,7 +305,6 @@ impl Default for LoadedImage {
             image: Default::default(),
             width: 320,
             height: 320,
-            alpha: false,
             upscale: false,
             handle: None,
         }
@@ -300,20 +314,19 @@ impl Default for LoadedImage {
 pub type SharedLoadedImage = Rc<RefCell<LoadedImage>>;
 
 pub fn find_images(map: &HashMap<String, State>, location: impl AsRef<Path>) -> Vec<(SharedString, SharedLoadedImage)> {
-    let mut found_images: Vec<(SharedString, (PathBuf, (u32, u32), bool, bool))> = vec![];
+    let mut found_images: Vec<(SharedString, (PathBuf, (u32, u32), bool))> = vec![];
 
     let mut add_unique = |
         name: &String,
         path: &PathBuf,
         width: u32,
         height: u32,
-        alpha: bool,
         upscale: bool
     | {
         if !found_images.iter().any(|(k, _)| k.refer(|k| k == name)) {
             found_images.push((
                 name.to_string().into(),
-                (path.clone(), (width, height), alpha, upscale)
+                (path.clone(), (width, height), upscale)
             ))
         }
     };
@@ -321,14 +334,13 @@ pub fn find_images(map: &HashMap<String, State>, location: impl AsRef<Path>) -> 
     for state in map.values() {
         match &state.image {
             StateImage::Single {
-                name, path, width, height, alpha, upscale, ..
+                name, path, width, height, upscale, ..
             } => {
                 add_unique(
                     name,
                     path,
                     *width,
                     *height,
-                    *alpha,
                     *upscale
                 );
             }
@@ -339,7 +351,6 @@ pub fn find_images(map: &HashMap<String, State>, location: impl AsRef<Path>) -> 
                         &frame.path,
                         frame.width,
                         frame.height,
-                        frame.alpha,
                         frame.upscale
                     )
                 }
@@ -351,14 +362,13 @@ pub fn find_images(map: &HashMap<String, State>, location: impl AsRef<Path>) -> 
     let base_location = location.as_ref().to_path_buf();
 
     found_images.into_iter()
-        .map(|(k, (path, (width, height), alpha, upscale))|
+        .map(|(k, (path, (width, height), upscale))|
             (k, Rc::new(RefCell::new(LoadedImage {
                 image: load_image_or_black(base_location.join(&path)),
                 width,
                 height,
                 path,
                 handle: None,
-                alpha,
                 upscale,
             }))))
         .collect()

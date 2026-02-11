@@ -63,8 +63,6 @@ namespace bp::image {
         std::vector<WeakAllocatedImageData> _allocations{};
 
         void clear_expired();
-        /// Returns end of the found occlusion, or std::nullopt if there wasn't any
-        [[nodiscard]] std::optional<std::size_t> check_occlusions(std::size_t start, std::size_t len) const;
         [[nodiscard]] std::optional<std::size_t> find_space(std::size_t size) const;
     public:
         [[nodiscard]] std::size_t largest_block_size_sl() const;

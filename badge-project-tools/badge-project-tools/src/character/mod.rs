@@ -28,7 +28,7 @@ fn append_vec<P: AsRef<Path>, T: std::io::Write>(builder: &mut tar::Builder<T>, 
     builder.append_data(&mut header, path, data)
 }
 
-fn save_image(char_path: impl AsRef<Path>, mut archive: &mut Builder<File>, name: &String, location: &Path, path: &Path, width: u32, height: u32, alpha: bool, upscale: bool) -> anyhow::Result<()> {
+fn save_image(char_path: impl AsRef<Path>, mut archive: &mut Builder<File>, name: &String, location: &Path, path: &Path, width: u32, height: u32, upscale: bool) -> anyhow::Result<()> {
     let real_width = if upscale {
         width / 2
     } else {
@@ -45,7 +45,7 @@ fn save_image(char_path: impl AsRef<Path>, mut archive: &mut Builder<File>, name
     append_vec(
         &mut archive,
         PathBuf::from(char_path.as_ref()).join("images").join(format!("{name}.bin")),
-        &encode_image_data(&file, real_width, real_height, alpha, true)?
+        &encode_image_data(&file, real_width, real_height, true)?
     )?;
     Ok(())
 }
@@ -74,11 +74,10 @@ pub fn process_character_archive(char: Character, path: impl AsRef<Path>, locati
             path,
             width,
             height,
-            alpha,
             upscale,
             ..
         } = &state.image {
-            save_image(&char_path, &mut archive, name, location, path, *width, *height, *alpha, *upscale)?;
+            save_image(&char_path, &mut archive, name, location, path, *width, *height, *upscale)?;
         }
 
         if let StateImage::Sequence {
@@ -88,7 +87,7 @@ pub fn process_character_archive(char: Character, path: impl AsRef<Path>, locati
             let frames_path = state_path.join("frames");
             for (index, frame) in frames.iter().enumerate() {
                 // Save image file
-                save_image(&char_path, &mut archive, &frame.name, location, &frame.path, frame.width, frame.height, frame.alpha, frame.upscale)?;
+                save_image(&char_path, &mut archive, &frame.name, location, &frame.path, frame.width, frame.height, frame.upscale)?;
 
                 // Save frame
                 let frame_path = frames_path.join(format!("{index}.bin"));
@@ -124,7 +123,7 @@ pub fn process_character_archive(char: Character, path: impl AsRef<Path>, locati
                     append_vec(
                         &mut archive,
                         anim_path.join("frames").join(format!("{index}.bin")),
-                        &encode_image_data(&image, anim.real_width(), anim.real_height(), false, false)?
+                        &encode_image_data(&image, anim.real_width(), anim.real_height(), false)?
                     )?;
                 }
             }
@@ -136,7 +135,7 @@ pub fn process_character_archive(char: Character, path: impl AsRef<Path>, locati
                     append_vec(
                         &mut archive,
                         anim_path.join("frames").join(format!("{index}.bin")),
-                        &encode_image_data(&image, anim.real_width(), anim.real_height(), false, false)?
+                        &encode_image_data(&image, anim.real_width(), anim.real_height(), false)?
                     )?;
                 }
             }

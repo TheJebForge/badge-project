@@ -13,7 +13,7 @@ use egui_snarl::ui::{
 use egui_snarl::{InPin, InPinId, NodeId, OutPin, OutPinId, Snarl};
 use num_format::{Locale, ToFormattedString};
 use std::cmp::{Ordering, PartialEq};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fmt::Display;
 use std::ops::Deref;
 use std::rc::{Rc, Weak};
@@ -56,15 +56,28 @@ pub fn simulator_ui(
                 !validations.contains(&ValidationError::InvalidDefaultState),
                 |ui| {
                     if ui.button("Start Simulator").clicked() {
+                        let Some((_, default_state_info)) =
+                            states.iter().find(|(k, _)| k == default_state) else {
+                            eprintln!("Default state is not found??");
+                            return;
+                        };
+
+                        let borrowed_state = default_state_info.borrow();
+
                         *simulator_state = Some(SimulatorState {
                             status: Default::default(),
+                            current_layer: borrowed_state.layer,
                             current_state: default_state.clone(),
                             next_state: None,
                             possible_transitions: vec![],
                             possible_actions: vec![],
                             current_image: None,
-                            preloaded_images: Default::default(),
-                            preloaded_animations: Default::default(),
+                            new_layer_images: Default::default(),
+                            new_layer_animations: Default::default(),
+                            loaded_layer_images: Default::default(),
+                            loaded_layer_animations: Default::default(),
+                            layer_images_to_remove: Default::default(),
+                            layer_animations_to_remove: Default::default(),
                             loaded_images: vec![],
                             prepared_images: vec![],
                             allocator: AllocatorState::default(),
@@ -132,6 +145,7 @@ impl Simulator<'_> {
                     .resizable(false)
                     .show(ui.ctx(), |ui| {
                         ui.label(format!("Current State: {}", self.sim_state.current_state));
+                        ui.label(format!("Current Layer: {}", self.sim_state.current_layer));
 
                         if let Some(next) = &self.sim_state.next_state {
                             ui.add_space(SPACING);
@@ -188,7 +202,7 @@ impl Simulator<'_> {
     fn next_state_ui<'a>(
         ui: &mut Ui,
         label: impl Display,
-        transitions: &Vec<(SharedString, bool)>,
+        transitions: &Vec<StateSwitchInfo>,
     ) -> Option<SharedString> {
         let label = label.to_string();
 
@@ -202,15 +216,16 @@ impl Simulator<'_> {
                         ScrollArea::vertical()
                             .id_salt(&label)
                             .show(ui, |ui| {
-                                for (name, dynamic) in transitions {
+                                for info in transitions {
                                     let text = format!(
-                                        "{}{}",
-                                        name,
-                                        if *dynamic { " (cook)" } else { "" }
+                                        "{}{}{}",
+                                        info.name,
+                                        if info.is_dynamic { " (cook)" } else { "" },
+                                        if info.is_layer_switch {" (switch layer)"} else {""}
                                     );
 
                                     if ui.button(text).clicked() {
-                                        return Some(name.clone());
+                                        return Some(info.name.clone());
                                     }
                                 }
 
@@ -224,32 +239,38 @@ impl Simulator<'_> {
         .inner
     }
 
-    pub fn is_dynamic_load_state(&self, state: &SharedString) -> Option<bool> {
+    pub fn is_dynamic_or_layer_switch(&self, state: &SharedString) -> Option<(bool, bool)> {
         let Some((_, state)) = self.states.iter().find(|(k, _)| k == state) else {
             return None;
         };
 
         let state = state.borrow();
 
-        match &state.image {
-            InterStateImage::None => Some(false),
-            InterStateImage::Single { preload, .. } => Some(!*preload),
+        let is_layer_switch = state.layer != self.sim_state.current_layer;
+
+        let is_dynamic = match &state.image {
+            InterStateImage::None => false,
+            InterStateImage::Single { load_mask, .. } =>
+                load_mask & state.layer == 0,
             InterStateImage::Animation {
-                preload, animation, ..
+                load_mask, animation, ..
             } => {
-                if *preload {
-                    Some(false)
+                if load_mask & state.layer != 0 {
+                    false
                 } else {
                     let Some((_, animation)) = self.animations.iter().find(|(k, _)| k == animation)
                     else {
                         return None;
                     };
 
-                    Some(animation.mode.is_from_ram())
+                    animation.mode.is_from_ram()
                 }
             }
-            InterStateImage::Sequence { mode, .. } => Some(!mode.is_preload()),
-        }
+            InterStateImage::Sequence { load_mask, .. } =>
+                load_mask & state.layer == 0,
+        };
+
+        Some((is_dynamic, is_layer_switch))
     }
 
     pub fn cook_state(&mut self, state: &SharedString) -> bool {
@@ -264,8 +285,8 @@ impl Simulator<'_> {
 
         match &state.image {
             InterStateImage::None => {}
-            InterStateImage::Single { image, preload } => {
-                if *preload {
+            InterStateImage::Single { image, load_mask } => {
+                if load_mask & self.sim_state.current_layer != 0 {
                     return true;
                 }
 
@@ -275,8 +296,7 @@ impl Simulator<'_> {
 
                 let image = image.borrow();
 
-                let size =
-                    calc_required_space(image.width, image.height, image.alpha, image.upscale);
+                let size = calc_required_space(image.width, image.height, image.upscale);
 
                 let Some(allocation) = self.sim_state.allocator.allocate(size) else {
                     return false;
@@ -285,9 +305,9 @@ impl Simulator<'_> {
                 self.sim_state.prepared_images.push(allocation)
             }
             InterStateImage::Animation {
-                animation, preload, ..
+                animation, load_mask, ..
             } => {
-                if *preload {
+                if load_mask & self.sim_state.current_layer != 0 {
                     return true;
                 }
 
@@ -303,7 +323,6 @@ impl Simulator<'_> {
                 let size = calc_required_space(
                     animation.width,
                     animation.height,
-                    false,
                     animation.upscale,
                 );
 
@@ -315,7 +334,11 @@ impl Simulator<'_> {
                     self.sim_state.prepared_images.push(allocation)
                 }
             }
-            InterStateImage::Sequence { mode, sequence } => {
+            InterStateImage::Sequence { load_mask, mode, sequence } => {
+                if load_mask & self.sim_state.current_layer != 0 {
+                    return true;
+                }
+
                 let Some((_, sequence)) = self.sequences.iter()
                     .find(|(k, _)| k == sequence) else {
                     return true;
@@ -335,7 +358,6 @@ impl Simulator<'_> {
                             let size = calc_required_space(
                                 image.width,
                                 image.height,
-                                image.alpha,
                                 image.upscale,
                             );
 
@@ -360,7 +382,6 @@ impl Simulator<'_> {
                             let size = calc_required_space(
                                 image.width,
                                 image.height,
-                                image.alpha,
                                 image.upscale,
                             );
 
@@ -386,12 +407,135 @@ impl Simulator<'_> {
         true
     }
 
+    pub fn prepare_layer(&mut self, new_layer: u16) -> bool {
+        self.sim_state.current_layer = new_layer;
+
+        let mut new_layer_images = HashSet::<SharedString>::new();
+        let mut new_layer_anims = HashSet::<SharedString>::new();
+
+        // Layer discovery
+        for (_, state) in self.states {
+            let borrowed_state = state.borrow();
+
+            match &borrowed_state.image {
+                InterStateImage::Single { load_mask, image } => {
+                    if load_mask & new_layer != 0 {
+                        new_layer_images.insert(image.clone());
+                    }
+                }
+                InterStateImage::Animation { animation, load_mask, .. } => {
+                    if load_mask & new_layer != 0 {
+                        new_layer_anims.insert(animation.clone());
+                    }
+                }
+                InterStateImage::Sequence { sequence, load_mask, .. } => {
+                    if load_mask & new_layer != 0 {
+                        let Some((_, sequence)) = self.sequences.iter()
+                            .find(|(k, _)| k == sequence)
+                        else {
+                            continue
+                        };
+
+                        for frame in &sequence.frames {
+                            new_layer_images.insert(frame.image.clone());
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        // Write down unneeded images and animations
+        self.sim_state.layer_images_to_remove = self.sim_state.loaded_layer_images.iter()
+            .filter_map(|(k, _)| {
+                if !new_layer_images.contains(k) {
+                    return Some(k.clone())
+                }
+                None
+            })
+            .collect();
+        self.sim_state.layer_animations_to_remove = self.sim_state.loaded_layer_animations.iter()
+            .filter_map(|(k, _)| {
+                if !new_layer_anims.contains(k) {
+                    return Some(k.clone())
+                }
+                None
+            })
+            .collect();
+
+        // Load missing images and animations
+        for image_name in new_layer_images {
+            if !self.sim_state.loaded_layer_images.contains_key(&image_name) {
+                let Some((_, image)) = self.images.iter().find(|(k, _)| k == &image_name) else {
+                    continue
+                };
+
+                let image = image.borrow();
+
+                let size = calc_required_space(image.width, image.height, image.upscale);
+
+                let Some(allocation) = self.sim_state.allocator.allocate(size) else {
+                    return false;
+                };
+
+                self.sim_state.new_layer_images.insert(image_name, allocation);
+            }
+        }
+
+        for anim_name in new_layer_anims {
+            if !self.sim_state.loaded_layer_animations.contains_key(&anim_name) {
+                let Some((_, animation)) = self.animations.iter().find(|(k, _)| k == &anim_name)
+                else {
+                    return true;
+                };
+
+                let size = calc_required_space(
+                    animation.width,
+                    animation.height,
+                    animation.upscale,
+                );
+
+                let mut frames = vec![];
+                for _ in 0..animation.frames.count() {
+                    let Some(allocation) = self.sim_state.allocator.allocate(size) else {
+                        return false;
+                    };
+
+                    frames.push(allocation)
+                }
+
+                self.sim_state.new_layer_animations.insert(anim_name, frames);
+            }
+        }
+
+        true
+    }
+
     pub fn schedule_or_switch(&mut self, state: &SharedString) -> bool {
-        let Some(is_dynamic) = self.is_dynamic_load_state(state) else {
+        let Some((is_dynamic, is_layer_switch)) = self.is_dynamic_or_layer_switch(state) else {
             return true;
         };
 
-        if is_dynamic {
+        if is_layer_switch {
+            self.sim_state.next_state = Some(state.clone());
+
+            let Some((_, state_ref)) = self.states.iter().find(|(k, _)| k == state) else {
+                println!("Couldn't find state reference!");
+                return true;
+            };
+
+            if !self.prepare_layer(state_ref.borrow().layer) {
+                return false;
+            }
+
+            if is_dynamic {
+                if !self.cook_state(state) {
+                    return false
+                }
+            }
+
+            true
+        } else if is_dynamic {
             self.cook_state(state)
         } else {
             self.sim_state.next_state = Some(state.clone());
@@ -415,22 +559,30 @@ impl Simulator<'_> {
         let state = state.borrow();
 
         if let InterStateImage::Animation { next_state, .. } = &state.image {
-            if let Some(is_dynamic) = self.is_dynamic_load_state(next_state) {
+            if let Some((is_dynamic, is_layer_switch)) = self.is_dynamic_or_layer_switch(next_state) {
                 self.sim_state
                     .possible_transitions
-                    .push((next_state.clone(), is_dynamic));
+                    .push(StateSwitchInfo {
+                        name: next_state.clone(),
+                        is_dynamic,
+                        is_layer_switch,
+                    });
             };
         } else {
             for transition in &state.transitions {
                 let transition = transition.borrow();
 
-                let Some(is_dynamic) = self.is_dynamic_load_state(&transition.to_state) else {
+                let Some((is_dynamic, is_layer_switch)) = self.is_dynamic_or_layer_switch(&transition.to_state) else {
                     continue;
                 };
 
                 self.sim_state
                     .possible_transitions
-                    .push((transition.to_state.clone(), is_dynamic));
+                    .push(StateSwitchInfo {
+                        name: transition.to_state.clone(),
+                        is_dynamic,
+                        is_layer_switch,
+                    });
             }
 
             for (_, action) in self.actions {
@@ -438,22 +590,55 @@ impl Simulator<'_> {
                     continue;
                 };
 
-                let Some(is_dynamic) = self.is_dynamic_load_state(action_state) else {
+                let Some((is_dynamic, is_layer_switch)) = self.is_dynamic_or_layer_switch(action_state) else {
                     continue;
                 };
 
                 self.sim_state
                     .possible_actions
-                    .push((action_state.clone(), is_dynamic));
+                    .push(StateSwitchInfo {
+                        name: action_state.clone(),
+                        is_dynamic,
+                        is_layer_switch,
+                    });
             }
         }
     }
 
     pub fn switch_to_scheduled(&mut self) {
-        if let Some(state) = &self.sim_state.next_state {
-            self.sim_state.current_state = state.clone();
-            self.sim_state.loaded_images = self.sim_state.prepared_images.clone();
-            self.sim_state.prepared_images.clear();
+        let sim = &mut *self.sim_state;
+
+        if let Some(state) = &sim.next_state {
+            sim.current_state = state.clone();
+            sim.loaded_images = sim.prepared_images.clone();
+            sim.prepared_images.clear();
+
+            // Insert new images into the layer
+            if !sim.new_layer_images.is_empty() {
+                sim.loaded_layer_images.extend(
+                    sim.new_layer_images.clone()
+                );
+                sim.new_layer_images.clear();
+            }
+
+            if !sim.new_layer_animations.is_empty() {
+                sim.loaded_layer_animations.extend(
+                    sim.new_layer_animations.clone()
+                );
+                sim.new_layer_animations.clear();
+            }
+
+            // Delete unneeded images
+            for to_remove in &sim.layer_images_to_remove {
+                sim.loaded_layer_images.remove(to_remove);
+            }
+            sim.layer_images_to_remove.clear();
+
+            for to_remove in &sim.layer_animations_to_remove {
+                sim.loaded_layer_animations.remove(to_remove);
+            }
+            sim.layer_animations_to_remove.clear();
+
 
             let Some((_, state_data)) = self.states.iter().find(|(k, _)| k == state) else {
                 return;
@@ -463,22 +648,22 @@ impl Simulator<'_> {
 
             match &state_data.image {
                 InterStateImage::None => {}
-                InterStateImage::Single { image, preload } => {
-                    if *preload {
-                        let Some(alloc) = self.sim_state.preloaded_images.get(image) else {
+                InterStateImage::Single { image, load_mask } => {
+                    if load_mask & sim.current_layer != 0 {
+                        let Some(alloc) = sim.loaded_layer_images.get(image) else {
                             return;
                         };
 
-                        self.sim_state.current_image = Some(alloc.clone())
+                        sim.current_image = Some(alloc.clone())
                     } else {
-                        self.sim_state.current_image = Some(self.sim_state.loaded_images[0].clone())
+                        sim.current_image = Some(sim.loaded_images[0].clone())
                     }
                 }
                 InterStateImage::Animation {
-                    animation, preload, ..
+                    animation, load_mask, ..
                 } => {
-                    if *preload {
-                        let Some(frames) = self.sim_state.preloaded_animations.get(animation)
+                    if load_mask & sim.current_layer != 0 {
+                        let Some(frames) = sim.loaded_layer_animations.get(animation)
                         else {
                             return;
                         };
@@ -487,37 +672,37 @@ impl Simulator<'_> {
                             return;
                         };
 
-                        self.sim_state.current_image = Some(first.clone())
+                        sim.current_image = Some(first.clone())
                     } else {
-                        self.sim_state.current_image = self.sim_state.loaded_images.get(0).cloned();
+                        sim.current_image = sim.loaded_images.get(0).cloned();
                     }
                 }
-                InterStateImage::Sequence { mode, sequence } => {
+                InterStateImage::Sequence { load_mask, sequence, .. } => {
                     let Some((_, sequence)) = self.sequences.iter()
                         .find(|(k, _)| k == sequence) else {
                         return;
                     };
 
-                    if mode.is_preload() {
+                    if load_mask & sim.current_layer != 0 {
                         let Some(first_frame) = sequence.frames.first() else {
                             return;
                         };
 
-                        let Some(alloc) = self.sim_state.preloaded_images.get(&first_frame.image)
+                        let Some(alloc) = sim.loaded_layer_images.get(&first_frame.image)
                         else {
                             return;
                         };
 
-                        self.sim_state.current_image = Some(alloc.clone())
+                        sim.current_image = Some(alloc.clone())
                     } else {
-                        self.sim_state.current_image = self.sim_state.loaded_images.get(0).cloned();
+                        sim.current_image = sim.loaded_images.get(0).cloned();
                     }
                 }
             }
         }
 
+        sim.next_state = None;
         self.find_possible_transitions();
-        self.sim_state.next_state = None;
     }
 
     pub fn preload(&mut self) -> Option<()> {
@@ -526,8 +711,8 @@ impl Simulator<'_> {
 
             match &borrowed.image {
                 InterStateImage::None => {}
-                InterStateImage::Single { image, preload } => {
-                    if !preload {
+                InterStateImage::Single { image, load_mask } => {
+                    if load_mask & self.sim_state.current_layer == 0 {
                         continue;
                     }
 
@@ -537,20 +722,19 @@ impl Simulator<'_> {
 
                     let image_data = image_data.borrow();
 
-                    self.sim_state.preloaded_images.insert(
+                    self.sim_state.loaded_layer_images.insert(
                         image.clone(),
                         self.sim_state.allocator.allocate(calc_required_space(
                             image_data.width,
                             image_data.height,
-                            image_data.alpha,
                             image_data.upscale,
                         ))?,
                     );
                 }
                 InterStateImage::Animation {
-                    animation, preload, ..
+                    animation, load_mask, ..
                 } => {
-                    if !preload {
+                    if load_mask & self.sim_state.current_layer == 0 {
                         continue;
                     }
 
@@ -563,19 +747,18 @@ impl Simulator<'_> {
                     let frame_size = calc_required_space(
                         animation_info.width,
                         animation_info.height,
-                        false,
                         animation_info.upscale,
                     );
 
-                    self.sim_state.preloaded_animations.insert(
+                    self.sim_state.loaded_layer_animations.insert(
                         animation.clone(),
                         (0..animation_info.frames.count())
                             .map(|_| self.sim_state.allocator.allocate(frame_size))
                             .collect::<Option<Vec<_>>>()?,
                     );
                 }
-                InterStateImage::Sequence { sequence, mode } => {
-                    if *mode != SequenceMode::Preload {
+                InterStateImage::Sequence { load_mask, sequence, .. } => {
+                    if load_mask & self.sim_state.current_layer == 0 {
                         continue;
                     }
 
@@ -593,12 +776,11 @@ impl Simulator<'_> {
 
                         let image_data = image_data.borrow();
 
-                        self.sim_state.preloaded_images.insert(
+                        self.sim_state.loaded_layer_images.insert(
                             frame.image.clone(),
                             self.sim_state.allocator.allocate(calc_required_space(
                                 image_data.width,
                                 image_data.height,
-                                image_data.alpha,
                                 image_data.upscale,
                             ))?,
                         );
@@ -765,17 +947,17 @@ impl SnarlViewer<StateNode> for SimulatorNodeViewer<'_> {
     }
 }
 
-fn calc_required_space(width: u32, height: u32, alpha: bool, upscale: bool) -> u64 {
+fn calc_required_space(width: u32, height: u32, upscale: bool) -> u64 {
     let width = if upscale { width / 2 } else { width } as u64;
     let height = if upscale { height / 2 } else { height } as u64;
-    let bytes_per_pixel = if alpha { 3_u64 } else { 2_u64 };
 
-    width * height * bytes_per_pixel
+    width * height * 2_u64
 }
 
 #[derive(Default)]
 struct AllocationSize {
-    preloaded_size: u64,
+    layer_size: u64,
+    new_layer_size: u64,
     loaded_size: u64,
     prepared_size: u64,
     current_size: u64,
@@ -786,7 +968,9 @@ fn visualize_allocator(ui: &mut Ui, state: &SimulatorState) {
         const BG: Color32 = Color32::DARK_BLUE;
         const OCCUPIED: Color32 = Color32::LIGHT_BLUE;
         const CURRENT_IMAGE: Color32 = Color32::LIGHT_GREEN;
-        const PRELOADED_IMAGE: Color32 = Color32::GRAY;
+        const MARKED_LAYER_IMAGE: Color32 = Color32::DARK_GRAY;
+        const LAYER_IMAGE: Color32 = Color32::GRAY;
+        const NEW_LAYER_IMAGE: Color32 = Color32::DARK_RED;
         const LOADED_IMAGE: Color32 = Color32::ORANGE;
         const PREPARED_IMAGE: Color32 = Color32::LIGHT_RED;
 
@@ -836,24 +1020,54 @@ fn visualize_allocator(ui: &mut Ui, state: &SimulatorState) {
 
             let aware_offset = actual_alloc_height;
 
-            for (_, image) in &state.preloaded_images {
-                sizes.preloaded_size += image.len();
+            for (image_name, image) in &state.loaded_layer_images {
+                sizes.layer_size += image.len();
                 paint_allocation(
                     image.deref(),
                     aware_offset,
                     aware_alloc_height,
-                    PRELOADED_IMAGE,
+                    if state.layer_images_to_remove.contains(image_name) {
+                        MARKED_LAYER_IMAGE
+                    } else {
+                        LAYER_IMAGE
+                    },
                 );
             }
 
-            for (_, frames) in &state.preloaded_animations {
+            for (anim_name, frames) in &state.loaded_layer_animations {
                 for frame in frames {
-                    sizes.preloaded_size += frame.len();
+                    sizes.layer_size += frame.len();
                     paint_allocation(
                         frame.deref(),
                         aware_offset,
                         aware_alloc_height,
-                        PRELOADED_IMAGE,
+                        if state.layer_animations_to_remove.contains(anim_name) {
+                            MARKED_LAYER_IMAGE
+                        } else {
+                            LAYER_IMAGE
+                        },
+                    );
+                }
+            }
+
+            for (_, image) in &state.new_layer_images {
+                sizes.new_layer_size += image.len();
+                paint_allocation(
+                    image.deref(),
+                    aware_offset,
+                    aware_alloc_height,
+                    NEW_LAYER_IMAGE,
+                );
+            }
+
+            for (_, frames) in &state.new_layer_animations {
+                for frame in frames {
+                    sizes.new_layer_size += frame.len();
+                    paint_allocation(
+                        frame.deref(),
+                        aware_offset,
+                        aware_alloc_height,
+                        NEW_LAYER_IMAGE,
                     );
                 }
             }
@@ -909,20 +1123,20 @@ fn visualize_allocator(ui: &mut Ui, state: &SimulatorState) {
             );
         }
 
-        ScrollArea::horizontal().show(ui, |ui| {
+        let draw_legend = |ui: &mut Ui, color: Color32, label: &str| {
             ui.horizontal(|ui| {
-                let draw_legend = |ui: &mut Ui, color: Color32, label: &str| {
-                    ui.horizontal(|ui| {
-                        let (resp, painter) = ui.allocate_painter(vec2(15.0, 15.0), Sense::empty());
+                let (resp, painter) = ui.allocate_painter(vec2(15.0, 15.0), Sense::empty());
 
-                        let inner_rect = resp.rect.shrink(2.0);
+                let inner_rect = resp.rect.shrink(2.0);
 
-                        painter.rect_filled(inner_rect, 2.5, color);
+                painter.rect_filled(inner_rect, 2.5, color);
 
-                        ui.label(label);
-                    });
-                };
+                ui.label(label);
+            });
+        };
 
+        ui.vertical(|ui| {
+            ui.horizontal(|ui| {
                 draw_legend(ui, OCCUPIED, "Occupied");
                 draw_legend(
                     ui,
@@ -934,12 +1148,23 @@ fn visualize_allocator(ui: &mut Ui, state: &SimulatorState) {
                 );
                 draw_legend(
                     ui,
-                    PRELOADED_IMAGE,
+                    LAYER_IMAGE,
                     &format!(
-                        "Preloaded ({}b)",
-                        sizes.preloaded_size.to_formatted_string(&Locale::en)
+                        "Loaded Layer ({}b)",
+                        sizes.layer_size.to_formatted_string(&Locale::en)
                     ),
                 );
+                draw_legend(
+                    ui,
+                    NEW_LAYER_IMAGE,
+                    &format!(
+                        "New Layer ({}b)",
+                        sizes.new_layer_size.to_formatted_string(&Locale::en)
+                    ),
+                );
+            });
+
+            ui.horizontal(|ui| {
                 draw_legend(
                     ui,
                     LOADED_IMAGE,
@@ -956,21 +1181,44 @@ fn visualize_allocator(ui: &mut Ui, state: &SimulatorState) {
                         sizes.prepared_size.to_formatted_string(&Locale::en)
                     ),
                 );
+                draw_legend(
+                    ui,
+                    MARKED_LAYER_IMAGE,
+                    "Marked for Delete"
+                );
             });
         });
     }
 }
 
+pub struct StateSwitchInfo {
+    pub name: SharedString,
+    pub is_dynamic: bool,
+    pub is_layer_switch: bool
+}
+
 pub struct SimulatorState {
     pub status: SimulatorStatus,
     pub allocator: AllocatorState,
+
+    pub current_layer: u16,
     pub current_state: SharedString,
     pub next_state: Option<SharedString>,
-    pub possible_transitions: Vec<(SharedString, bool)>,
-    pub possible_actions: Vec<(SharedString, bool)>,
+
+    pub possible_transitions: Vec<StateSwitchInfo>,
+    pub possible_actions: Vec<StateSwitchInfo>,
+
     pub current_image: Option<StrongAllocation>,
-    pub preloaded_images: HashMap<SharedString, StrongAllocation>,
-    pub preloaded_animations: HashMap<SharedString, Vec<StrongAllocation>>,
+
+    pub new_layer_images: HashMap<SharedString, StrongAllocation>,
+    pub new_layer_animations: HashMap<SharedString, Vec<StrongAllocation>>,
+
+    pub loaded_layer_images: HashMap<SharedString, StrongAllocation>,
+    pub loaded_layer_animations: HashMap<SharedString, Vec<StrongAllocation>>,
+
+    pub layer_images_to_remove: HashSet<SharedString>,
+    pub layer_animations_to_remove: HashSet<SharedString>,
+
     pub loaded_images: Vec<StrongAllocation>,
     pub prepared_images: Vec<StrongAllocation>,
 }

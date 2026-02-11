@@ -74,6 +74,13 @@ namespace bp::data {
         load_image_data(buffer, get_image_path(name));
     }
 
+    uint16_t Character::default_load_layer() const {
+        const auto& default_state = this->states.at(this->default_state);
+        return default_state.load_layer
+                   ? default_state.load_layer
+                   : 1;
+    }
+
     std::vector<std::string> list_characters() {
         std::vector<std::string> names{};
 
@@ -183,41 +190,46 @@ namespace bp::data {
                     state_file->close();
                 }
 
-                auto state_pair = states.emplace(state_entry.path().filename(), State{}).first;
-                auto& [image, transitions] = state_pair->second;
+                auto state_pair = states.emplace(
+                    state_entry.path().filename(),
+                    State{
+                        .load_layer = state_struct.load_layer
+                    }
+                ).first;
+                auto& [_, image, transitions] = state_pair->second;
 
                 switch (state_struct.image_type) {
                     case BP_CHARACTER_STATE_NO_IMAGE:
                         image = std::monostate{};
                         break;
                     case BP_CHARACTER_STATE_SINGLE_IMAGE: {
-                        auto& [image_name, width, height, has_alpha, upscale, preload] = state_struct.image.image;
+                        auto& [image_name, width, height, upscale, load_layer_mask] = state_struct.image.image;
                         image = StateImage{
                             .image_name = image_name,
                             .width = width,
                             .height = height,
-                            .has_alpha = has_alpha,
                             .upscale = upscale,
-                            .preload = preload
+                            .load_layer_mask = load_layer_mask
                         };
                         break;
                     }
                     case BP_CHARACTER_STATE_ANIMATION: {
-                        auto& [name, next_state, loop_count, preload] = state_struct.image.animation;
+                        auto& [name, next_state, loop_count, load_layer_mask] = state_struct.image.animation;
                         image = StateAnimation{
                             .name = name,
                             .next_state = next_state,
                             .loop_count = loop_count,
-                            .preload = preload,
+                            .load_layer_mask = load_layer_mask,
                             .frames_folder = character.animations_folder / name / "frames"
                         };
                         break;
                     }
                     case BP_CHARACTER_STATE_SEQUENCE: {
-                        auto& [frame_count, mode] = state_struct.image.sequence;
+                        auto& [frame_count, mode, load_layer_mask] = state_struct.image.sequence;
 
                         image = StateSequence{
                             .frames{},
+                            .load_layer_mask = load_layer_mask
                         };
 
                         // ReSharper disable once CppUseStructuredBinding
@@ -229,9 +241,6 @@ namespace bp::data {
                                 break;
                             case BP_CHARACTER_SEQUENCE_MODE_LOAD_EACH:
                                 sequence.mode = SequenceLoadMode::LoadEach;
-                                break;
-                            case BP_CHARACTER_SEQUENCE_MODE_PRELOAD:
-                                sequence.mode = SequenceLoadMode::Preload;
                                 break;
                         }
 
@@ -255,7 +264,6 @@ namespace bp::data {
                                 frame_struct.image_name,
                                 frame_struct.width,
                                 frame_struct.height,
-                                frame_struct.has_alpha,
                                 frame_struct.upscale,
                                 frame_struct.duration_us
                             );
@@ -408,20 +416,20 @@ namespace bp::data {
         }
     }
 
-    PreloadedData preload_data(const Character& character) {
-        PreloadedData preloaded_data{};
-        preload_data(preloaded_data, character);
+    LoadedLayerData preload_layer_data(const Character& character) {
+        LoadedLayerData preloaded_data{};
+        preload_layer_data(preloaded_data, character);
         return preloaded_data;
     }
 
     lv_image_dsc_t make_image_dsc(
-        const bool has_alpha, const uint32_t width, const uint32_t height,
+        const uint32_t width, const uint32_t height,
         const ImageDataVec& image_data
     ) {
         return {
             .header{
                 .magic = LV_IMAGE_HEADER_MAGIC,
-                .cf = static_cast<uint32_t>(has_alpha ? LV_COLOR_FORMAT_RGB565A8 : LV_COLOR_FORMAT_RGB565),
+                .cf = LV_COLOR_FORMAT_RGB565,
                 .w = width,
                 .h = height
             },
@@ -431,13 +439,13 @@ namespace bp::data {
     }
 
     lv_image_dsc_t make_image_dsc(
-        const bool has_alpha, const uint32_t width, const uint32_t height,
+        const uint32_t width, const uint32_t height,
         const image::SharedAllocatedImageData& image_data
     ) {
         return {
             .header{
                 .magic = LV_IMAGE_HEADER_MAGIC,
-                .cf = static_cast<uint32_t>(has_alpha ? LV_COLOR_FORMAT_RGB565A8 : LV_COLOR_FORMAT_RGB565),
+                .cf = LV_COLOR_FORMAT_RGB565,
                 .w = width,
                 .h = height
             },
@@ -456,8 +464,8 @@ namespace bp::data {
     }
 
     void preload_image(
-        PreloadedData& preloaded_data, const std::string& image_name, const fs::path& images_folder,
-        const bool has_alpha, const uint32_t width, const uint32_t height
+        LoadedLayerData& layer_data, const std::string& image_name, const fs::path& images_folder,
+        const uint32_t width, const uint32_t height
     ) {
         image::SharedAllocatedImageData image_data;
 
@@ -478,30 +486,67 @@ namespace bp::data {
             load_image_data(image_data->span(), image_filename);
         }
 
-        preloaded_data.image_data.emplace(
+        layer_data.image_data.emplace(
             image_name,
-            std::make_tuple(make_image_dsc(has_alpha, width, height, image_data), std::move(image_data))
+            std::make_tuple(make_image_dsc(width, height, image_data), std::move(image_data))
         );
     }
 
-    void preload_data(PreloadedData& preloaded_data, const Character& character) {
-        preloaded_data.animation_frames.clear();
-        preloaded_data.image_data.clear();
+    void preload_animation(
+        LoadedLayerData& layer_data, const StateAnimation& state_anim, const Animation& anim_desc,
+        const bool should_wait
+    ) {
+        const auto data_size = anim_desc.width * anim_desc.height * ANIMATION_BYTES_PER_PIXEL;
+
+        const auto [inserted, _ignore2] = layer_data.animation_frames.emplace(
+            state_anim.name,
+            std::vector<image::SharedAllocatedImageData>()
+        );
+
+        auto& frames = inserted->second;
+        frames.reserve(anim_desc.frame_count);
+
+        for (int frame_index = 1; frame_index <= anim_desc.frame_count; frame_index++) {
+            image::SharedAllocatedImageData frame;
+            if (const auto opt_image = image::allocator.allocate_image_data_sl(data_size)) {
+                frame = opt_image.value();
+            } else {
+                throw data_exception{Error::OutOfRAM};
+            }
+
+            ESP_LOGI(TAG, "Allocated %x-%x for %s #%d", frame->start(), frame->end(), state_anim.name.c_str(), frame_index);
+
+            state_anim.load_frame(frame->span(), frame_index);
+
+            frames.emplace_back(std::move(frame));
+
+            if (should_wait) {
+                vTaskDelay(30 / portTICK_PERIOD_MS);
+            }
+        }
+    }
+
+    void preload_layer_data(LoadedLayerData& layer_data, const Character& character) {
+        layer_data.animation_frames.clear();
+        layer_data.image_data.clear();
+
+        const auto default_layer = character.default_load_layer();
 
         for (const auto& [_, state]: character.states) {
             if (const auto* image = std::get_if<StateImage>(&state.image)) {
-                if (!image->preload) continue;
+                if (!(image->load_layer_mask & default_layer)) continue;
+
                 preload_image(
-                    preloaded_data, image->image_name, character.images_folder,
-                    image->has_alpha, image->width, image->height
+                    layer_data, image->image_name, character.images_folder,
+                    image->width, image->height
                 );
             } else if (const auto* sequence = std::get_if<StateSequence>(&state.image)) {
-                if (sequence->mode != SequenceLoadMode::Preload) continue;
+                if (!(sequence->load_layer_mask & default_layer)) continue;
 
                 for (const auto& frame: sequence->frames) {
                     preload_image(
-                        preloaded_data, frame.image_name, character.images_folder,
-                        frame.has_alpha, frame.width, frame.height
+                        layer_data, frame.image_name, character.images_folder,
+                        frame.width, frame.height
                     );
                 }
             }
@@ -511,33 +556,10 @@ namespace bp::data {
             if (!std::holds_alternative<StateAnimation>(state.image)) continue;
 
             const auto& state_anim = std::get<StateAnimation>(state.image);
-            if (!state_anim.preload) continue;
+            if (!(state_anim.load_layer_mask & default_layer)) continue;
 
             const auto& anim_desc = character.animations.at(state_anim.name);
-            const auto data_size = anim_desc.width * anim_desc.height * ANIMATION_BYTES_PER_PIXEL;
-
-            const auto [inserted, _ignore2] = preloaded_data.animation_frames.emplace(
-                state_anim.name,
-                std::vector<image::SharedAllocatedImageData>()
-            );
-
-            auto& frames = inserted->second;
-            frames.reserve(anim_desc.frame_count);
-
-            for (int frame_index = 1; frame_index <= anim_desc.frame_count; frame_index++) {
-                image::SharedAllocatedImageData frame;
-                if (const auto opt_image = image::allocator.allocate_image_data_sl(data_size)) {
-                    frame = opt_image.value();
-                } else {
-                    throw data_exception{Error::OutOfRAM};
-                }
-
-                ESP_LOGI(TAG, "Allocated %x-%x for %s #%d", frame->start(), frame->end(), state_anim.name.c_str(), frame_index);
-
-                state_anim.load_frame(frame->span(), frame_index);
-
-                frames.emplace_back(std::move(frame));
-            }
+            preload_animation(layer_data, state_anim, anim_desc);
         }
     }
 

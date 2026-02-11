@@ -42,9 +42,8 @@ namespace bp::data {
         std::string image_name;
         uint32_t width;
         uint32_t height;
-        bool has_alpha;
         bool upscale;
-        bool preload;
+        uint16_t load_layer_mask;
 
         [[nodiscard]] bool image_exists(const Character& character) const;
         [[nodiscard]] std::size_t get_image_size(const Character& character) const;
@@ -55,7 +54,7 @@ namespace bp::data {
         std::string name;
         std::string next_state;
         uint16_t loop_count;
-        bool preload;
+        uint16_t load_layer_mask;
         std::filesystem::path frames_folder;
 
         void load_frame(std::span<uint8_t> buffer, std::size_t index) const;
@@ -65,7 +64,6 @@ namespace bp::data {
         std::string image_name;
         uint32_t width;
         uint32_t height;
-        bool has_alpha;
         bool upscale;
         int64_t duration_us;
 
@@ -76,13 +74,13 @@ namespace bp::data {
 
     enum class SequenceLoadMode {
         LoadAll,
-        LoadEach,
-        Preload
+        LoadEach
     };
 
     struct StateSequence {
         std::vector<SequenceFrame> frames;
         SequenceLoadMode mode;
+        uint16_t load_layer_mask;
 
         [[nodiscard]] bool frame_exists(const Character& character, std::size_t index) const;
         [[nodiscard]] std::size_t get_frame_size(const Character& character, std::size_t index) const;
@@ -92,6 +90,7 @@ namespace bp::data {
     using StateImageVariant = std::variant<std::monostate, StateImage, StateAnimation, StateSequence>;
 
     struct State {
+        uint16_t load_layer;
         StateImageVariant image;
         std::vector<StateTransition> transitions;
     };
@@ -143,6 +142,7 @@ namespace bp::data {
         bool image_exists(const std::string& name) const;
         std::size_t get_image_size(const std::string& name) const;
         void load_image(std::span<uint8_t> buffer, const std::string& name) const;
+        uint16_t default_load_layer() const;
     };
 
     std::vector<std::string> list_characters();
@@ -159,23 +159,33 @@ namespace bp::data {
 
     using ImageDataVec = std::vector<uint8_t, PsramAllocator<uint8_t>>;
 
-    lv_image_dsc_t make_image_dsc(bool has_alpha, uint32_t width, uint32_t height, const ImageDataVec& image_data);
-    lv_image_dsc_t make_image_dsc(bool has_alpha, uint32_t width, uint32_t height, const image::SharedAllocatedImageData& image_data);
+    lv_image_dsc_t make_image_dsc(uint32_t width, uint32_t height, const ImageDataVec& image_data);
+    lv_image_dsc_t make_image_dsc(uint32_t width, uint32_t height, const image::SharedAllocatedImageData& image_data);
 
     void load_image_data(std::span<uint8_t> buffer, const std::filesystem::path& path);
 
-    struct PreloadedData {
+    struct LoadedLayerData {
         StrMap<std::tuple<lv_image_dsc_t, image::SharedAllocatedImageData>> image_data;
         StrMap<std::vector<image::SharedAllocatedImageData>> animation_frames;
     };
 
-    /// @throws data_exception If there's not enough RAM
-    /// @throws std::out_of_range If animation wasn't found
-    PreloadedData preload_data(const Character& character);
+    void preload_image(
+        LoadedLayerData& layer_data, const std::string& image_name, const std::filesystem::path& images_folder,
+        uint32_t width, uint32_t height
+    );
+
+    void preload_animation(
+        LoadedLayerData& layer_data, const StateAnimation& state_anim, const Animation& anim_desc,
+        bool should_wait = false
+    );
 
     /// @throws data_exception If there's not enough RAM
     /// @throws std::out_of_range If animation wasn't found
-    void preload_data(PreloadedData& preloaded_data, const Character& character);
+    LoadedLayerData preload_layer_data(const Character& character);
+
+    /// @throws data_exception If there's not enough RAM
+    /// @throws std::out_of_range If animation wasn't found
+    void preload_layer_data(LoadedLayerData& layer_data, const Character& character);
 
     enum class Error {
         IncompatibleFiles,
