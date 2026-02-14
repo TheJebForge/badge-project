@@ -16,8 +16,8 @@ use crate::gui::app::start::StartScreen;
 use crate::gui::app::util::{inline_style_label, pick_unique_name, ChangeTracker};
 use crate::gui::app::{util, BoxedGuiPage, GuiPage, PageResponse};
 use anyhow::anyhow;
-use egui::containers::menu::MenuButton;
-use egui::{pos2, vec2, Align2, Button, CentralPanel, Color32, ColorImage, ComboBox, FontId, Image, InnerResponse, Key, Rect, Sense, Stroke, StrokeKind, TextureHandle, TextureOptions, TopBottomPanel, Ui, WidgetText};
+use egui::containers::menu::{MenuButton, MenuConfig};
+use egui::{pos2, vec2, Align2, Button, CentralPanel, Color32, ColorImage, ComboBox, FontId, Image, InnerResponse, Key, PopupCloseBehavior, Rect, Sense, Stroke, StrokeKind, TextureHandle, TextureOptions, TopBottomPanel, Ui, WidgetText};
 use egui_snarl::ui::SnarlStyle;
 use egui_snarl::Snarl;
 use std::cell::{RefCell, RefMut};
@@ -32,6 +32,7 @@ pub struct CharacterEditor {
     tab: EditorTab,
     location: PathBuf,
     file_path: Option<PathBuf>,
+    include_select_export: bool,
     last_save: Option<Instant>,
     id: String,
     name: String,
@@ -98,6 +99,7 @@ impl CharacterEditor {
             tab: EditorTab::default(),
             location,
             file_path: original,
+            include_select_export: false,
             last_save: None,
             id: char.id,
             name: char.name,
@@ -223,7 +225,7 @@ impl CharacterEditor {
 
         let char = self.as_repr();
 
-        process_character_archive(char, picked_file, &self.location)
+        process_character_archive(char, picked_file, &self.location, self.include_select_export)
     }
 
     pub fn export(&self) {
@@ -245,7 +247,7 @@ impl CharacterEditor {
         let char = self.as_repr();
 
         let mut buffer: Vec<u8> = vec![];
-        write_character_tar(char, &mut buffer, &self.location)?;
+        write_character_tar(char, &mut buffer, &self.location, self.include_select_export)?;
 
         let mut archive = tar::Archive::new(buffer.as_slice());
         archive.unpack(picked_location)?;
@@ -587,7 +589,9 @@ impl GuiPage for CharacterEditor {
                 ui.add_enabled_ui(self.simulator_state.is_none(), |ui| {
                     ui.horizontal_centered(|ui| {
                         if let Some(resp) = MenuButton::new("File")
-                            .ui(ui, |ui| {
+                            .config(
+                                MenuConfig::new().close_behavior(PopupCloseBehavior::CloseOnClickOutside)
+                            ).ui(ui, |ui| {
                                 ui.allocate_exact_size(vec2(100.0, 0.0), Sense::empty());
 
                                 if ui.button("Save (Ctrl + S)".rich()).clicked() {
@@ -605,6 +609,8 @@ impl GuiPage for CharacterEditor {
                                 if ui.button("Export to Location (Ctrl + Shift + E)").clicked() {
                                     self.handle_export_to_folder()
                                 }
+
+                                ui.checkbox(&mut self.include_select_export, "Include Select");
 
                                 ui.separator();
 

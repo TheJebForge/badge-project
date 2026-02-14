@@ -20,9 +20,11 @@ pub struct CharacterCli {
     input_file: PathBuf,
     #[arg(help = "Output file")]
     output_file: PathBuf,
+    #[arg(short = 's', help = "To include selected.lock into the archive", default_value_t = false)]
+    include_selected: bool
 }
 
-fn append_vec<P: AsRef<Path>, T: std::io::Write>(builder: &mut tar::Builder<T>, path: P, data: &[u8]) -> std::io::Result<()> {
+fn append_vec<P: AsRef<Path>, T: Write>(builder: &mut Builder<T>, path: P, data: &[u8]) -> std::io::Result<()> {
     let mut header = Header::new_gnu();
     header.set_mode(0o664);
     header.set_size(data.len() as u64);
@@ -70,22 +72,26 @@ fn save_image<W: Write>(
 
 pub fn process_character_cli(cli: CharacterCli) -> anyhow::Result<()> {
     let char: Character = serde_json::from_str(&fs::read_to_string(cli.input_file)?)?;
-    process_character_archive(char, cli.output_file, env::current_dir()?)
+    process_character_archive(char, cli.output_file, env::current_dir()?, cli.include_selected)
 }
 
-pub fn process_character_archive(char: Character, path: impl AsRef<Path>, location: impl AsRef<Path>) -> anyhow::Result<()> {
+pub fn process_character_archive(char: Character, path: impl AsRef<Path>, location: impl AsRef<Path>, include_select: bool) -> anyhow::Result<()> {
     let file = File::create(path)?;
 
-    write_character_tar(char, file, location)
+    write_character_tar(char, file, location, include_select)
 }
 
-pub fn write_character_tar(char: Character, writer: impl Write, location: impl AsRef<Path>) -> anyhow::Result<()> {
+pub fn write_character_tar(char: Character, writer: impl Write, location: impl AsRef<Path>, include_select: bool) -> anyhow::Result<()> {
     let location = location.as_ref();
 
     let char_path = Path::new("characters").join(&char.id);
 
     let mut archive = Builder::new(writer);
     append_vec(&mut archive, char_path.join("character.bin"), &char.to_bin()?)?;
+
+    if include_select {
+        append_vec(&mut archive, char_path.join("selected.lock"), &[])?;
+    }
 
     let mut saved_images = HashSet::new();
 
