@@ -14,13 +14,7 @@
     </cargoProject>
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="a1adc736-dd13-4dc0-93b4-2fe3353375b1" name="Changes" comment="Increased size of layer selection boxes">
-      <change beforePath="$PROJECT_DIR$/../badge-project-cpp/sdkconfig" beforeDir="false" afterPath="$PROJECT_DIR$/../badge-project-cpp/sdkconfig" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/../badge-project-cpp/sdkconfig.old" beforeDir="false" afterPath="$PROJECT_DIR$/../badge-project-cpp/sdkconfig.old" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/badge-project-tools/src/character/mod.rs" beforeDir="false" afterPath="$PROJECT_DIR$/badge-project-tools/src/character/mod.rs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/badge-project-tools/src/gui/app/editor/mod.rs" beforeDir="false" afterPath="$PROJECT_DIR$/badge-project-tools/src/gui/app/editor/mod.rs" afterDir="false" />
-    </list>
+    <list default="true" id="a1adc736-dd13-4dc0-93b4-2fe3353375b1" name="Changes" comment="Include selected.lock option" />
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
@@ -139,7 +133,7 @@
       <workItem from="1770764778851" duration="8624000" />
       <workItem from="1770831533093" duration="8769000" />
       <workItem from="1770933379220" duration="3640000" />
-      <workItem from="1771078773518" duration="364000" />
+      <workItem from="1771078773518" duration="577000" />
     </task>
     <task id="LOCAL-00001" summary="Most of GUI work is done">
       <option name="closed" value="true" />
@@ -197,7 +191,15 @@
       <option name="project" value="LOCAL" />
       <updated>1770842935238</updated>
     </task>
-    <option name="localTasksCounter" value="8" />
+    <task id="LOCAL-00008" summary="Include selected.lock option">
+      <option name="closed" value="true" />
+      <created>1771079263050</created>
+      <option name="number" value="00008" />
+      <option name="presentableId" value="LOCAL-00008" />
+      <option name="project" value="LOCAL" />
+      <updated>1771079263051</updated>
+    </task>
+    <option name="localTasksCounter" value="9" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -237,6 +239,7 @@
     <MESSAGE value="Replaced preload with layer system for more control over persistent memory" />
     <MESSAGE value="Fix unused tracker and remove redundant code" />
     <MESSAGE value="Increased size of layer selection boxes" />
-    <option name="LAST_COMMIT_MESSAGE" value="Increased size of layer selection boxes" />
+    <MESSAGE value="Include selected.lock option" />
+    <option name="LAST_COMMIT_MESSAGE" value="Include selected.lock option" />
   </component>
 </project>

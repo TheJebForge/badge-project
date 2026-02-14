@@ -159,39 +159,41 @@ pub fn sequence_edit_ui(
     );
 
     ui.vertical(|ui| {
-        ui.label("Frames:");
+        CollapsingHeader::new("Frames")
+            .id_salt(ui.id().with(key.0.as_ptr()))
+            .show(ui, |ui| {
+                vec_ui(ui, &mut element.frames, images, |ui, index, frame, images, tracker| {
+                    inline_image_resource_picker(
+                        ui,
+                        "Image:",
+                        &mut frame.image,
+                        images,
+                        location,
+                        TEXT_WIDTH,
+                        tracker,
+                    );
+                    inline_validation_error(
+                        ui,
+                        validations,
+                        "Invalid image!",
+                        |err| {
+                            let ValidationError::InvalidImageInSequenceFrame(name, err_index) = err else {
+                                return false;
+                            };
 
-        vec_ui(ui, &mut element.frames, images, |ui, index, frame, images, tracker| {
-            inline_image_resource_picker(
-                ui,
-                "Image:",
-                &mut frame.image,
-                images,
-                location,
-                TEXT_WIDTH,
-                tracker,
-            );
-            inline_validation_error(
-                ui,
-                validations,
-                "Invalid image!",
-                |err| {
-                    let ValidationError::InvalidImageInSequenceFrame(name, err_index) = err else {
-                        return false;
-                    };
-
-                    key.str_eq(name) && index == *err_index
-                },
-                TEXT_WIDTH,
-            );
-            inline_duration_value(
-                ui,
-                "Duration:",
-                &mut frame.duration,
-                TEXT_WIDTH,
-                tracker,
-            );
-        }, tracker);
+                            key.str_eq(name) && index == *err_index
+                        },
+                        TEXT_WIDTH,
+                    );
+                    inline_duration_value(
+                        ui,
+                        "Duration:",
+                        &mut frame.duration,
+                        TEXT_WIDTH,
+                        tracker,
+                    );
+                }, tracker);
+            });
     });
 
 }
